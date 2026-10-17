@@ -148,4 +148,97 @@ class StaticSurfacesTest extends TestCase
             app('files')->deleteDirectory($directory);
         }
     }
+
+    public function test_filament_trait_authorization_body_changes_invalidate_approvals(): void
+    {
+        if (! class_exists(Panel::class)) {
+            $this->markTestSkipped('Optional Filament integration job installs its real package.');
+        }
+        $directory = sys_get_temp_dir().'/clearance-trait-'.bin2hex(random_bytes(6));
+        mkdir($directory);
+        $namespace = 'ClearanceTraitFixture'.bin2hex(random_bytes(6));
+        $class = $namespace.'\\Resource';
+        $file = $directory.'/Resource.php';
+        $source = '<?php namespace '.$namespace.'; trait Decision { protected static function decide(\\Illuminate\\Database\\Eloquent\\Model $record): bool { return false; } } class Resource extends \\Dgtlss\\Clearance\\Tests\\Fixtures\\Resources\\OrderResource { use Decision { decide as public canEdit; } public static function getPages(): array { return []; } }';
+        file_put_contents($file, $source);
+        require $file;
+        app(PanelRegistry::class)->register(Panel::make()->id('trait')->resources([$class]));
+        try {
+            $before = app(Clearance::class)->scan();
+            $before['routes'] = [];
+            $id = 'filament trait:resource:'.$class;
+            $this->assertSame('false', $before['surfaces'][$id]['overrides']['canEdit']);
+            $before['surfaces'][$id] = app(ApprovalStore::class)->approve($before['surfaces'][$id], 'Denial reviewed', 'reviewer');
+            file_put_contents($file, str_replace('return false;', 'return true;', $source));
+            $after = app(Clearance::class)->scan();
+            $after['routes'] = [];
+            $this->assertSame('true', $after['surfaces'][$id]['overrides']['canEdit']);
+            $changes = app(MatrixDiff::class)->blocking(app(MatrixDiff::class)->compare($before, $after));
+            $this->assertContains('static_changed', array_column($changes, 'type'));
+            $applied = app(ApprovalStore::class)->apply($after, $before);
+            $this->assertFalse(app(ApprovalStore::class)->valid($applied['surfaces'][$id]));
+        } finally {
+            app('files')->deleteDirectory($directory);
+        }
+    }
+
+    public function test_anonymous_livewire_actions_remain_inventoried_when_moved_into_traits(): void
+    {
+        if (! class_exists('Livewire\\Component')) {
+            $this->markTestSkipped('Optional Livewire integration job installs its real package.');
+        }
+        $directory = sys_get_temp_dir().'/clearance-anonymous-'.bin2hex(random_bytes(6));
+        mkdir($directory);
+        $namespace = 'ClearanceActionFixture'.bin2hex(random_bytes(6));
+        $trait = $directory.'/Edits.php';
+        file_put_contents($trait, '<?php namespace '.$namespace.'; trait Edits { #[\\Livewire\\Attributes\\Locked] public int $recordId = 1; public function saveOrder(): string { return "dummy"; } }');
+        require $trait;
+        $file = $directory.'/component.blade.php';
+        file_put_contents($file, '<?php new class extends \\Livewire\\Component { public function saveOrder(): void { \\Illuminate\\Support\\Facades\\Gate::authorize("edit"); } };');
+        config(['clearance.detect.livewire_paths' => [$file]]);
+        try {
+            $before = app(Clearance::class)->scan();
+            $before['routes'] = [];
+            $id = array_key_first($before['surfaces']);
+            $this->assertNotNull($id);
+            file_put_contents($file, '<?php new class extends \\Livewire\\Component { use \\'.$namespace.'\\Edits; };');
+            $after = app(Clearance::class)->scan();
+            $after['routes'] = [];
+            $this->assertSame('complete', $after['collectors']['livewire']['status'], implode(' ', $after['collectors']['livewire']['diagnostics']));
+            $this->assertContains($id, $after['surface_inventory']);
+            $this->assertArrayHasKey($id, $after['surfaces']);
+            $this->assertSame(['recordId'], $after['surfaces'][$id]['locked_properties']);
+            $changes = app(MatrixDiff::class)->blocking(app(MatrixDiff::class)->compare($before, $after));
+            $this->assertContains('guard_removed', array_column($changes, 'type'));
+            file_put_contents($file, '<?php new class extends \\Livewire\\Component { use \\'.$namespace.'\\Edits { saveOrder as private; } };');
+            $incomplete = app(Clearance::class)->scan();
+            $this->assertSame('error', $incomplete['collectors']['livewire']['status']);
+            $this->assertContains('coverage_lost', array_column(app(MatrixDiff::class)->compare($after, $incomplete), 'type'));
+        } finally {
+            app('files')->deleteDirectory($directory);
+        }
+    }
+
+    public function test_ambiguous_external_template_identities_report_incomplete_discovery(): void
+    {
+        if (! class_exists('Livewire\\Component')) {
+            $this->markTestSkipped('Optional Livewire integration job installs its real package.');
+        }
+        $directory = sys_get_temp_dir().'/clearance-identity-'.bin2hex(random_bytes(6));
+        mkdir($directory);
+        mkdir($directory.'/first');
+        mkdir($directory.'/second');
+        $paths = [$directory.'/first/component.blade.php', $directory.'/second/component.blade.php'];
+        foreach ($paths as $index => $path) {
+            file_put_contents($path, '<?php new class extends \\Livewire\\Component { public function action'.$index.'(): void {} };');
+        }
+        config(['clearance.detect.livewire_paths' => $paths]);
+        try {
+            $result = app(LivewireCollector::class)->collect();
+            $this->assertSame('error', $result['status']);
+            $this->assertStringContainsString('Ambiguous anonymous Livewire identity', implode(' ', $result['diagnostics']));
+        } finally {
+            app('files')->deleteDirectory($directory);
+        }
+    }
 }

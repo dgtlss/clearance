@@ -8,6 +8,7 @@ use Dgtlss\Clearance\Static\PolicyAnalyzer;
 use Dgtlss\Clearance\Static\SourceLocation;
 use Dgtlss\Clearance\Static\SurfaceAnalyzer;
 use Filament\Facades\Filament;
+use PhpParser\Node\Stmt\ClassMethod;
 use ReflectionClass;
 use ReflectionMethod;
 use Throwable;
@@ -60,7 +61,7 @@ final class FilamentCollector
                     $reflection = new ReflectionClass($class);
                     $profile = $this->analyzer->profile('filament', $class, $this->sources->forFile($reflection->getFileName(), $reflection->getStartLine()));
                     $profile['type'] = 'page';
-                    $node = $this->ast->method($class, 'canAccess');
+                    $node = $this->method($class, 'canAccess');
                     $profile['authorization'] = $this->analyzer->classification($node);
                     $profile['verdict'] = match ($profile['authorization']) {
                         'check', 'false' => 'guarded',
@@ -97,9 +98,10 @@ final class FilamentCollector
             $policy = $this->policies->analyze($profile['model'], $ability);
             if ($policy !== null) {
                 $profile['guards']['policies'][] = $policy;
-                $profile['guards']['evidence'][] = 'policy:'.$policy['class'].'@'.$ability.':'.$this->ast->fingerprint($this->ast->method($policy['class'], $ability));
+                $body = $this->method($policy['class'], $ability);
+                $profile['guards']['evidence'][] = 'policy:'.$policy['class'].'@'.$ability.':'.$this->ast->fingerprint($body);
                 if (method_exists($policy['class'], 'before')) {
-                    $profile['guards']['evidence'][] = 'policy-before:'.$policy['class'].':'.$this->ast->fingerprint($this->ast->method($policy['class'], 'before'));
+                    $profile['guards']['evidence'][] = 'policy-before:'.$policy['class'].':'.$this->ast->fingerprint($this->method($policy['class'], 'before'));
                 }
             }
         }
@@ -125,7 +127,7 @@ final class FilamentCollector
             if (str_starts_with($name, 'should') && ! in_array($name, ['shouldSkipAuthorization', 'shouldCheckPolicyExistence'], true)) {
                 continue;
             }
-            $node = $this->ast->method($class, $name);
+            $node = $this->method($class, $name);
             $profile['overrides'][$name] = $this->analyzer->classification($node);
             $profile['guards']['checks'] = array_values(array_unique([...$profile['guards']['checks'], ...($node ? $this->analyzer->checks($node) : [])]));
             $profile['guards']['evidence'][] = 'override:'.$name.':'.$this->ast->fingerprint($node);
@@ -136,6 +138,16 @@ final class FilamentCollector
         ksort($profile['overrides']);
         sort($profile['guards']['checks']);
         sort($profile['guards']['evidence']);
+    }
+
+    private function method(string $class, string $method): ?ClassMethod
+    {
+        $node = $this->ast->method($class, $method);
+        if ($node === null && method_exists($class, $method)) {
+            throw new \RuntimeException('Filament authorization source could not be resolved: '.$class.'@'.$method);
+        }
+
+        return $node;
     }
 
     private function panel(array $profile, object $panel): array

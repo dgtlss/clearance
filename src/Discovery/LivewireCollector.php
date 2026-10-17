@@ -27,6 +27,7 @@ final class LivewireCollector
             return $result;
         }
         try {
+            $templates = [];
             $classes = config('clearance.detect.livewire_components', []);
             $paths = config('clearance.detect.livewire_paths', []);
             $namespaces = [config('livewire.class_namespace', 'App\\Livewire')];
@@ -74,11 +75,17 @@ final class LivewireCollector
                             }
                         } elseif ($node instanceof Node\Stmt\Class_ && $node->extends?->toString() === 'Livewire\\Component') {
                             $name = app(SourceLocation::class)->forFile($file, $node->getStartLine())['file'];
-                            $locked = $this->locked($node);
-                            foreach ($node->getMethods() as $method) {
-                                if ($method->isPublic() && ! $method->isStatic() && $this->callable($method->name->toString())) {
-                                    $id = 'livewire '.$name.'@'.$method->name;
-                                    $result['surfaces'][$id] = $this->analyzer->action($name, $method, $file, $locked);
+                            $origin = (realpath($file) ?: $file).':'.$node->getStartFilePos();
+                            if (isset($templates[$name]) && $templates[$name] !== $origin) {
+                                throw new \RuntimeException('Ambiguous anonymous Livewire identity: '.$name);
+                            }
+                            $templates[$name] = $origin;
+                            [$methods, $locked, $traits] = $this->anonymous($node, $file);
+                            foreach ($methods as $methodName => [$method, $source, $public, $static]) {
+                                if ($public && ! $static && $this->callable($methodName, $traits)) {
+                                    $id = 'livewire '.$name.'@'.$methodName;
+                                    $result['surfaces'][$id] = $this->analyzer->action($name, $method, $source, $locked);
+                                    $result['surfaces'][$id]['method'] = $methodName;
                                 }
                             }
                         }
@@ -93,15 +100,10 @@ final class LivewireCollector
                 if ($reflection->isAbstract()) {
                     continue;
                 }
-                $locked = [];
-                foreach ($reflection->getProperties() as $property) {
-                    if ($property->isPublic() && $property->getAttributes('Livewire\\Attributes\\Locked') !== []) {
-                        $locked[] = $property->getName();
-                    }
-                }
-                sort($locked);
+                $locked = $this->lockedProperties($reflection);
+                $traits = array_values(class_uses_recursive($class));
                 foreach ($reflection->getMethods(ReflectionMethod::IS_PUBLIC) as $method) {
-                    if ($method->isStatic() || ! $this->callable($method->getName())
+                    if ($method->isStatic() || ! $this->callable($method->getName(), $traits)
                         || $method->getDeclaringClass()->getName() === 'Livewire\\Component') {
                         continue;
                     }
@@ -111,6 +113,7 @@ final class LivewireCollector
                     }
                     $id = 'livewire '.$class.'@'.$method->getName();
                     $result['surfaces'][$id] = $this->analyzer->action($class, $node, $method->getFileName(), $locked);
+                    $result['surfaces'][$id]['method'] = $method->getName();
                 }
             }
         } catch (Throwable $e) {
@@ -126,23 +129,94 @@ final class LivewireCollector
     {
         $reflection = new ReflectionObject($registry);
 
-        return $reflection->hasProperty($property) ? $reflection->getProperty($property)->getValue($registry) : [];
+        if (! $reflection->hasProperty($property)) {
+            throw new \RuntimeException('Unsupported Livewire discovery API: '.$registry::class.'::$'.$property);
+        }
+
+        return $reflection->getProperty($property)->getValue($registry);
     }
 
-    private function callable(string $name): bool
+    private function callable(string $name, array $traits = []): bool
     {
         $blocked = ['render', 'mount', 'exception', 'hydrate*', 'dehydrate*', 'updating*', 'updated*', '__*'];
         if (class_exists('Livewire\\Finder\\Finder')) {
             $blocked = [...$blocked, 'boot', 'booted', 'rendering', 'rendered', 'scriptSrc'];
+            foreach ($traits as $trait) {
+                foreach (['mount', 'boot', 'booted'] as $hook) {
+                    $blocked[] = $hook.class_basename($trait);
+                }
+            }
         }
 
         return ! Str::is($blocked, $name);
+    }
+
+    private function anonymous(Node\Stmt\Class_ $class, string $file): array
+    {
+        $methods = [];
+        $declared = array_fill_keys(array_map(fn ($method) => $method->name->toString(), $class->getMethods()), true);
+        $locked = $this->locked($class);
+        $traits = [];
+        foreach ($class->stmts as $statement) {
+            if (! $statement instanceof Node\Stmt\TraitUse) {
+                continue;
+            }
+            if ($statement->adaptations !== []) {
+                throw new \RuntimeException('Anonymous Livewire trait adaptations require explicit host coverage: '.$file);
+            }
+            foreach ($statement->traits as $trait) {
+                $name = $trait->toString();
+                if (! trait_exists($name)) {
+                    throw new \RuntimeException('Anonymous Livewire trait could not be resolved: '.$name);
+                }
+                $traits = [...$traits, $name, ...array_values(class_uses_recursive($name))];
+                $reflection = new ReflectionClass($name);
+                $locked = [...$locked, ...$this->lockedProperties($reflection)];
+                foreach ($reflection->getMethods() as $method) {
+                    $methodName = $method->getName();
+                    if (isset($declared[$methodName])) {
+                        continue;
+                    }
+                    if (isset($methods[$methodName])) {
+                        throw new \RuntimeException('Conflicting anonymous Livewire trait method: '.$methodName);
+                    }
+                    $node = $this->ast->method($name, $methodName);
+                    if ($node === null) {
+                        throw new \RuntimeException('Anonymous Livewire trait source could not be resolved: '.$name.'@'.$methodName);
+                    }
+                    $methods[$methodName] = [$node, $method->getFileName(), $method->isPublic(), $method->isStatic()];
+                }
+            }
+        }
+        foreach ($class->getMethods() as $method) {
+            $methods[$method->name->toString()] = [$method, $file, $method->isPublic(), $method->isStatic()];
+        }
+        $locked = array_values(array_unique($locked));
+        sort($locked);
+
+        return [$methods, $locked, array_unique($traits)];
+    }
+
+    private function lockedProperties(ReflectionClass $class): array
+    {
+        $locked = [];
+        foreach ($class->getProperties() as $property) {
+            if ($property->isPublic() && $property->getAttributes('Livewire\\Features\\SupportLockedProperties\\BaseLocked', \ReflectionAttribute::IS_INSTANCEOF) !== []) {
+                $locked[] = $property->getName();
+            }
+        }
+        sort($locked);
+
+        return $locked;
     }
 
     private function locked(Node\Stmt\ClassLike $class): array
     {
         $locked = [];
         foreach ($class->getProperties() as $property) {
+            if (! $property->isPublic()) {
+                continue;
+            }
             foreach ($property->attrGroups as $group) {
                 foreach ($group->attrs as $attribute) {
                     if ($attribute->name->toString() === 'Livewire\\Attributes\\Locked') {

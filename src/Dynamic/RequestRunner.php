@@ -12,6 +12,7 @@ use Illuminate\Http\Request;
 use Illuminate\Routing\Route;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Facade;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Notification;
@@ -48,6 +49,9 @@ final class RequestRunner
         $start = hrtime(true);
 
         try {
+            app()->forgetScopedInstances();
+            Facade::clearResolvedInstances();
+            $route->flushController();
             foreach ($profile['guards']['middleware'] as $middleware) {
                 $class = explode(':', $middleware, 2)[0];
 
@@ -64,6 +68,9 @@ final class RequestRunner
                 }
 
                 if ($name === 'http') {
+                    if (method_exists($facade::getFacadeRoot(), 'allowStrayRequests')) {
+                        $facade::allowStrayRequests([]);
+                    }
                     $facade::preventStrayRequests();
                 } elseif ($name === 'storage') {
                     foreach (array_keys(config('filesystems.disks', [])) as $disk) {
@@ -134,7 +141,9 @@ final class RequestRunner
                 return ['outcome' => 'unverified', 'status' => $status, 'category' => 'routing', 'reason' => 'Response was returned before the intended route was resolved.'];
             }
 
-            if ($httpRequest->route() !== null && RouteCollector::id($httpRequest->route(), $method) !== $id) {
+            if ($httpRequest->getMethod() !== $method || ($httpRequest->route() !== null
+                && RouteCollector::id($httpRequest->route(), $httpRequest->getMethod()) !== $id)
+                || ($status === 404 && $httpRequest->route() === null)) {
                 return ['outcome' => 'unverified', 'status' => $status, 'category' => 'routing', 'reason' => 'Request matched a different route.'];
             }
 
@@ -176,7 +185,9 @@ final class RequestRunner
             app('auth')->forgetGuards();
             app('auth')->shouldUse($defaultGuard);
             app()->instance('request', $originalRequest);
-            \Illuminate\Support\Facades\Request::clearResolvedInstance('request');
+            $route->flushController();
+            app()->forgetScopedInstances();
+            Facade::clearResolvedInstances();
             if ($endedTransaction) {
                 throw new RuntimeException('Application code ended a Clearance transaction. Verification stopped; use a disposable testing database and isolate this route.');
             }

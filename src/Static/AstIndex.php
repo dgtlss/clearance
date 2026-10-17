@@ -51,16 +51,39 @@ final class AstIndex
         }
 
         $reflection = new ReflectionMethod($class, $method);
+        $method = $reflection->getName();
         $path = $reflection->getFileName();
 
         if ($path === false || ! is_readable($path)) {
             return null;
         }
 
-        $classNode = (new NodeFinder)->findFirst($this->classes($path), fn (Node $node) => $node instanceof Node\Stmt\ClassLike
+        $classes = $this->classes($path);
+        $classNode = (new NodeFinder)->findFirst($classes, fn (Node $node) => $node instanceof Node\Stmt\ClassLike
             && isset($node->namespacedName)
             && $node->namespacedName->toString() === $reflection->getDeclaringClass()->getName());
 
-        return $classNode?->getMethod($method);
+        if ($node = $classNode?->getMethod($method)) {
+            return $node;
+        }
+        $alias = $reflection->getDeclaringClass()->getTraitAliases()[$method] ?? null;
+        if ($alias !== null) {
+            [$trait, $original] = explode('::', $alias, 2);
+
+            return $this->method($trait, $original);
+        }
+        // Reflection reports the consuming class for imported trait methods,
+        // while its source file and line range still identify the trait body.
+        $matches = [];
+        foreach ($classes as $candidate) {
+            foreach ($candidate->getMethods() as $node) {
+                if ($node->name->toString() === $method && $node->getStartLine() === $reflection->getStartLine()
+                    && $node->getEndLine() === $reflection->getEndLine()) {
+                    $matches[] = $node;
+                }
+            }
+        }
+
+        return count($matches) === 1 ? $matches[0] : null;
     }
 }
