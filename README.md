@@ -1,9 +1,5 @@
 # Clearance
 
-> **V1 development candidate — unreleased.** Verify who can reach Laravel routes,
-> inventory Livewire actions and Filament resources, and commit a reviewable
-> access matrix. No v1 tag or public release has been made.
-
 Clearance builds an **access matrix** for your app: configured routes × personas
 (guest, customer, staff, admin…). It calls routes through your test bootstrap as
 each persona, using owned and foreign records where model bindings are resolved.
@@ -19,14 +15,12 @@ notices the `authorize()` call is missing. Clearance makes that access visible.
 
 ## Install
 
-When a release is available through your Composer repository:
-
 ```bash
 composer require dgtlss/clearance --dev
 php artisan clearance:install
 ```
 
-For an unpublished local checkout, configure a Composer `path` repository pointing
+For a local checkout, configure a Composer `path` repository pointing
 to it and require `dgtlss/clearance:@dev` instead. The service provider is
 auto-discovered. The installer creates `config/clearance.php` and
 `app/Clearance/Personas.php` without overwriting existing files.
@@ -498,8 +492,7 @@ composer validate --strict
 
 The suite uses SQLite fixtures with owner/outsider policies and intentionally
 vulnerable routes. The repository defines six PHP/Laravel CI combinations across
-PHP 8.3–8.5 and Laravel 12–13; configured jobs are not a claim that a release's CI
-has passed. See the [candidate validation](docs/v1-validation.md) and
+PHP 8.3–8.5 and Laravel 12–13. See the [validation results](docs/v1-validation.md) and
 [release checklist](https://github.com/dgtlss/clearance/blob/main/.github/RELEASE_CHECKLIST.md).
 
 The acceptance command creates a temporary Laravel app, installs the local
