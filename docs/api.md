@@ -1,7 +1,6 @@
 # V1 public API
 
-This documents the intended 1.x compatibility boundary. The current candidate is
-unreleased; stable guarantees start with an approved 1.0.0 release. APIs not listed
+This documents the 1.x public API and compatibility boundary. APIs not listed
 here, including collectors, report implementation classes and request-runner
 internals, can change. None of these APIs grants application permissions.
 

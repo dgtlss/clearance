@@ -1,8 +1,8 @@
 # Upgrade to v1 / schema 2
 
 Start on a branch with a clean, reviewed baseline. Back up both generated files.
-Install the candidate through your chosen Composer repository; no public v1 has
-been tagged. Run the host test suite before changing its access baseline.
+Install Clearance through your chosen Composer repository. Run the host test
+suite before changing its access baseline.
 
 1. Compare your published `config/clearance.php` with the new package defaults.
    Keep application settings, add the collector settings and the `surface_added`

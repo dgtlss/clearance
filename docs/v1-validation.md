@@ -1,8 +1,7 @@
-# Local v1 candidate validation
+# V1 validation results
 
-Validated on **17 October 2026**. Candidate code: `274344c` on
-`codex/v1-readiness`, with subsequent documentation updates. This is local
-candidate evidence; the package remains unreleased.
+Validated on **17 October 2026**. Implementation reference: `274344c`, with
+subsequent documentation updates merged into `main`.
 
 ## Security remediation
 
@@ -73,10 +72,9 @@ timing includes the test bootstrap and requests, excludes Composer downloads and
 initial application setup, and is not a performance promise for every host app.
 See [acceptance.md](acceptance.md) for repeatable commands and isolation limits.
 
-## Release gates still outstanding
+## Hosted CI
 
-The local implementation and remediation work is complete. Hosted GitHub Actions
-must still pass on the exact reviewed release commit, and human beta/RC feedback
-and maintainer review remain release gates. The candidate has not been tagged,
-published or deployed. The [release checklist](https://github.com/dgtlss/clearance/blob/main/.github/RELEASE_CHECKLIST.md)
-keeps these steps separate from the completed local checks.
+All 12 jobs in the [Tests workflow](https://github.com/dgtlss/clearance/actions/runs/39074479930)
+passed on `main` at `bef5d2c`: six core combinations, two optional integration
+jobs, two SQL jobs, formatting and distribution checks. Release procedures are
+recorded in the [release checklist](https://github.com/dgtlss/clearance/blob/main/.github/RELEASE_CHECKLIST.md).

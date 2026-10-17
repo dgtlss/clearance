@@ -6,9 +6,8 @@ Please include the Clearance version or commit, PHP and Laravel versions, a
 minimal testing application or reproduction, and the expected and actual access
 results. Remove credentials and private application data from examples.
 
-Clearance is an unreleased v1 development candidate. Fixes currently target the development branch;
-there are no published versions receiving security updates yet. This policy will
-identify supported releases when the first version is published.
+Security fixes target `main`. See the [support policy](docs/support.md) for PHP,
+Laravel and optional integration compatibility.
 
 For an authorization problem found in a host application, contact that
 application's owner privately. Use this channel when Clearance itself causes a

@@ -1,8 +1,7 @@
 # Implementation status
 
-This is the **unreleased v1 development candidate**. `SPEC.md` remains the draft
-product guide; [api.md](api.md) describes the intended public API. Local work is
-on `codex/v1-readiness`; no v1 release, tag or publication is implied.
+This describes Clearance's implemented features and limits. `SPEC.md` is the
+draft product guide; [api.md](api.md) documents the public API.
 
 | Area | Available |
 | --- | --- |
@@ -84,9 +83,8 @@ real Spatie/ownership requests. This is a repeatable fixture result, not evidenc
 of a five-minute first result in every consumer application. Composer downloads,
 application-specific setup and fixture complexity vary.
 
-Final candidate validation and independent-review evidence are recorded in
-[v1-validation.md](v1-validation.md). Hosted GitHub Actions and human beta/RC feedback remain
-separate release evidence after the reviewed candidate is made available.
+Compatibility results, hosted CI and independent-review evidence are recorded in
+[v1-validation.md](v1-validation.md).
 
 ## Later roadmap
 

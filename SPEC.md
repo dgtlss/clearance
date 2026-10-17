@@ -1,13 +1,13 @@
 # Clearance — Product & Technical Spec
 
 > **dgtlss/clearance** · Continuous proof of who can access what in your Laravel app.
-> Status: draft v0.1 · Author: Nathan Langer (dgtlss) · Oct 2026 · Targets Laravel 12–13, PHP 8.3–8.5
+> Author: Nathan Langer (dgtlss) · Oct 2026 · Targets Laravel 12–13, PHP 8.3–8.5
 
 ---
 
 This is the original product draft, including illustrative APIs and later-roadmap
 ideas. It is not the current API reference. See [implementation status](docs/implementation.md),
-[public API](docs/api.md), and [v1 plan](docs/v1-plan.md). The current candidate uses
+[public API](docs/api.md), and [v1 checklist](docs/v1-plan.md). Clearance uses
 schema 2, a separate `surfaces` map for static evidence, nine commands including
 `clearance:migrate`, and no replay, tenancy or token-ability API.
 

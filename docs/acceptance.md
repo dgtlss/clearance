@@ -42,7 +42,7 @@ Copy the checkout into a disposable directory, excluding `.git` and `vendor`,
 then mount that copy at `/work` in the image. Resolve the dependency constraints
 from the relevant workflow matrix entry with `composer update --with=...`, then
 run the commands above. Keep each combination's vendor directory separate.
-Hosted Actions status remains a separate release check after the commit is pushed.
+See [validation results](v1-validation.md) for recorded local and hosted checks.
 
 `test:package` builds and inspects a ZIP, rejects development/private artifacts and
 installs that exact artifact in the fresh app. `test:benchmark` generates 250 more

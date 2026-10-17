@@ -1,8 +1,6 @@
 # Support and release policy
 
-The v1 candidate is unreleased. Local validation does not establish a public
-release, hosted CI success or human adoption evidence. Tagging, publishing and
-announcements require a separate release decision.
+Clearance supports the following PHP, Laravel and optional integration versions.
 
 | Component | Supported target |
 | --- | --- |
@@ -28,12 +26,11 @@ Lock schema changes require a migration; approvals must not disappear silently.
 
 The target is the two latest Laravel majors. Dropping a supported PHP/Laravel
 major is a breaking release, with upgrade notes. Security reports use the private
-channel in [SECURITY.md](../SECURITY.md). Once v1 is published, security fixes
-target the latest 1.x release; older unreleased candidates have no separate patch
-stream. Future end-of-support dates must be announced before changing this policy.
+channel in [SECURITY.md](../SECURITY.md). Security fixes target `main` and the
+latest 1.x release. End-of-support dates must be announced before changing this
+policy.
 
-A release candidate needs all hosted jobs green on its exact commit, an
-independent security review, a clean distribution install, and maintainer review
-of migration and known limits. Human beta feedback is separate evidence, recorded
-without publishing private consumer identities or data. Outstanding external
-checks remain visible in the [release checklist](https://github.com/dgtlss/clearance/blob/main/.github/RELEASE_CHECKLIST.md).
+Release checks include hosted CI on the exact commit, independent security
+review, installation from a built artifact, and maintainer review of migrations
+and known limits. Record integration feedback without publishing private
+consumer identities or data. See the [release checklist](https://github.com/dgtlss/clearance/blob/main/.github/RELEASE_CHECKLIST.md).

@@ -1,8 +1,6 @@
-# V1 completion plan
+# V1 implementation checklist
 
-This is implementation work toward the full open-source v1 described in
-`SPEC.md`. It does not authorize tagging, publishing, deployment or announcements.
-The working branch is `codex/v1-readiness`; `main` retains the reviewed beta.
+This checklist records the implemented open-source v1 scope based on `SPEC.md`.
 
 - [x] Livewire 3/4 static collectors: discover registered and application components,
   callable actions and locked properties; identify visible checks and mutations.
@@ -19,9 +17,9 @@ The working branch is `codex/v1-readiness`; `main` retains the reviewed beta.
   CI jobs for core versions, optional integrations and database engines.
 - [x] Independent security review and regression tests for confirmed findings.
 
-The local candidate evidence and remaining release gates are recorded in
-[v1-validation.md](v1-validation.md). Completed items describe the implemented,
-locally checked scope; static collectors do not claim dynamic component proof.
+Validation evidence is recorded in [v1-validation.md](v1-validation.md).
+Completed items describe the implemented and tested scope; static collectors do
+not claim dynamic component proof.
 
 The existing core compatibility target remains PHP 8.3–8.5, Laravel 12–13,
 Pest 3/4 and PHPUnit 11/12. Optional packages must remain optional. Private
@@ -29,7 +27,3 @@ consumer application identities, results and fixtures stay outside this package.
 
 Replay, SARIF, sticky comments, dynamic component verification, tenancy adapters,
 token-ability dimensions and paid features remain later-roadmap work.
-
-External release evidence is recorded separately: hosted CI must run against the
-reviewed candidate; human beta/RC feedback and publishing approval cannot be
-substituted by local test results.
