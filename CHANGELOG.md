@@ -7,10 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Planned first public beta: **v0.1.0**. No release date or tag has been set. The
-beta API may change. Date these notes when the release is actually made.
+Target: **v1.0.0**. This is an unreleased development candidate. No release date
+or tag has been set. Date these notes only when the release is approved.
 
 ### Added
+
+- Livewire 3/4 static component/action discovery, locked-property signals and visible unguarded mutations, including Livewire 4 anonymous class templates.
+- Filament 4/5 panel, resource and page discovery; model policy coverage, authorization overrides, skipped checks, configuration evidence and distinct resource-page identities.
+- Schema 2 static surfaces with no fabricated runtime access, canonical implementation fingerprints, new-surface/drift gates, hashed approvals and coverage-loss detection.
+- Lossless `clearance:migrate` for schema-1 route baselines and their approval hashes.
+- Optional Advisor 1.1 bridge preserving native checks and the worst A01 status, with documented outcome/conformance scores and Laravel 12 compatibility.
+- Actual Sanctum guard fixtures, multipart/nested uploads, and two-connection rollback on SQLite, MySQL and PostgreSQL.
+- Public API/support policy, migration and integration guides, a locally buildable static docs site and link validation.
+- Clean Composer/Git distribution rules and acceptance installation from a built ZIP.
+- Repeatable synthetic benchmark: 507 route entries and 3,549 scenarios; elapsed time is reported separately from deterministic matrices.
+- CI jobs for published optional integrations, SQL engines, distribution installs, docs and the benchmark.
 
 - Runtime route inventory with methods, URIs, domains, actions, and resolved global and route middleware.
 - Static AST signals for controller `authorize()` and Gate calls, FormRequest `authorize()`, policies, and owner-query or model-scope heuristics.
@@ -25,7 +36,7 @@ beta API may change. Date these notes when the release is actually made.
 - Parent-model context for ownership factories, allowing valid related fixtures for nested route bindings.
 - Fresh-app acceptance tests with real Spatie roles, both test runners, deterministic baselines, deliberate regressions, and the complete install/verify/lock/check/approve workflow in each CI combination.
 - `SECURITY.md` and an enabled GitHub private vulnerability reporting channel.
-- Eight Artisan commands: `clearance:install`, `clearance:scan`, `clearance:verify`, `clearance:lock`, `clearance:check`, `clearance:approve`, `clearance:explain`, and `clearance:personas`.
+- Nine Artisan commands (including the new `clearance:migrate`): `clearance:install`, `clearance:scan`, `clearance:verify`, `clearance:lock`, `clearance:check`, `clearance:approve`, `clearance:explain`, `clearance:personas`, and `clearance:migrate`.
 - Console and JSON output, plus automatic GitHub Actions change annotations from `clearance:check` when enabled.
 - Optional `Dgtlss\Clearance\Integrations\WardenAudit` adapter: blocking matrix changes block, baseline findings remain advisory, and findings carry OWASP A01 metadata.
 - Actionable diagnostics for unresolved controller classes and methods, retaining `unknown` verdicts and known middleware.
@@ -34,6 +45,10 @@ beta API may change. Date these notes when the release is actually made.
 - MIT license.
 
 ### Fixed
+
+- Uploaded files enter Laravel's real file bag. Minimal FormRequest payloads include basic bounds and file/image fixtures.
+- Application code ending a managed scenario transaction stops verification with an error instead of silently continuing after a commit.
+- Shared Filament page classes retain distinct resource identities rather than overwriting each other.
 
 - Model binding discovery follows Laravel's snake_case route-parameter fallback for camelCase controller arguments, while preserving exact-name precedence.
 - Binding failures for a known single-model fixture are verified through the real HTTP kernel instead of becoming premature scenario errors. Unresolved bindings across multiple parameters remain unverified so invalid nested fixtures cannot prove a denial.
@@ -49,7 +64,8 @@ beta API may change. Date these notes when the release is actually made.
 - Custom route binders and nested ownership have limited support; scenarios cannot cover every model state or outsider.
 - Successful action redirects remain unverified alongside custom rejection redirects; host feature tests are needed to distinguish them. Validation hidden behind helpers may also need explicit scenarios.
 - Physically removed routes count as narrowing; excluded registered routes and lost persona/scenario coverage block. Incomplete results also obey the configured error threshold.
-- Internal Livewire actions and Filament resources are not inventoried; OWASP Advisor scoring is not implemented.
+- Livewire and Filament evidence is static only; internal component actions have no verified persona access. Custom discovery and functional Volt templates need explicit host coverage.
+- Advisor scores describe outcomes/conformance, not an OWASP certification; Advisor 1.1 is compatible with Laravel 12 only.
 - Transactions cover only the default and configured database connections; DDL, explicit commits, direct filesystem writes, raw sockets, and external SDKs can escape isolation.
 - No hard per-request timeout. Slow completed scenarios, including setup, are detected; the generated test subprocess has a configurable timeout.
 

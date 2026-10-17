@@ -16,11 +16,40 @@ use Dgtlss\Clearance\Tests\TestCase;
 use Illuminate\Auth\Middleware\Authenticate;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 
 class VerificationTest extends TestCase
 {
+    public function test_file_payloads_use_the_real_request_file_bag_and_keep_foreign_access_denied(): void
+    {
+        app('router')->post('/upload/{order}', [FixtureController::class, 'upload'])->middleware(['web', 'auth'])->name('fixture.upload');
+        config(['clearance.routes.include' => ['fixture.upload']]);
+        $matrix = app(Verifier::class)->run($this);
+        $route = $matrix['routes']['POST upload/{order}'];
+        $this->assertSame('deny', $route['access']['guest']);
+        $this->assertSame(['owned' => 'allow', 'foreign' => 'deny'], $route['access']['customer']);
+        $this->assertSame(200, $route['observations']['customer']['owned']['status']);
+        $this->assertSame(403, $route['observations']['customer']['foreign']['status']);
+        $this->assertDatabaseCount('orders', 0);
+        $this->assertFalse(Storage::disk('local')->exists('uploads/fixture.txt'));
+        $this->assertFalse(Storage::disk('local')->exists('uploads/fixture.png'));
+    }
+
+    public function test_application_commits_cannot_silently_disable_request_rollback(): void
+    {
+        app('router')->post('/commit', function () {
+            DB::commit();
+
+            return ['ok' => true];
+        })->name('fixture.commit');
+        config(['clearance.routes.include' => ['fixture.commit']]);
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('ended a Clearance transaction');
+        app(Verifier::class)->run($this);
+    }
+
     public function test_unresolved_actions_do_not_turn_runtime_failures_into_denials(): void
     {
         app('router')->post('/missing-action', [MissingActionController::class, 'missing'])->name('fixture.missing-action');
@@ -53,6 +82,8 @@ class VerificationTest extends TestCase
     public function test_422_only_counts_as_allowed_when_authorization_precedes_validation(): void
     {
         config(['clearance.routes.include' => ['fixture.update', 'fixture.late', 'fixture.validated-late']]);
+        config(['clearance.dynamic.payloads.PUT orders/{order}' => []]);
+        config(['clearance.dynamic.payloads.POST validated-late/{order}' => []]);
         $routes = app(Verifier::class)->run($this)['routes'];
 
         $this->assertSame(422, $routes['PUT orders/{order}']['observations']['customer']['owned']['status']);

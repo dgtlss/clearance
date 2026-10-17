@@ -4,7 +4,7 @@
     "type": "library",
     "license": "MIT",
     "require": {
-        "php": "^8.3",
+        "php": ">=8.3 <8.6",
         "laravel/framework": "^12.0 || ^13.0",
         "nikic/php-parser": "^5.4",
         "symfony/process": "^7.2 || ^8.0"
@@ -14,6 +14,15 @@
         "orchestra/testbench": "^10.0 || ^11.0",
         "pestphp/pest": "^3.8 || ^4.0",
         "phpunit/phpunit": "^11.5 || ^12.0"
+    },
+    "suggest": {
+        "dgtlss/owaspadvisor": "Optional A01 report and scoring integration (1.1, Laravel 12).",
+        "dgtlss/warden": "Optional CI audit integration (^2.2).",
+        "filament/filament": "Optional static resource and page analysis (^4.0 or ^5.0).",
+        "livewire/livewire": "Optional static component action analysis (^3.0 or ^4.0)."
+    },
+    "archive": {
+        "exclude": ["/vendor", "/tests", "/.github", "/.phpunit*", "/.gitignore", "/.gitattributes", "/.DS_Store", "/.env*", "/auth.json", "/node_modules", "/build", "/docs/build.php", "/AGENTS.md", "/composer.lock", "/phpunit.xml", "/pint.json"]
     },
     "autoload": {
         "psr-4": { "Dgtlss\\Clearance\\": "src/" }
@@ -29,6 +38,9 @@
     "scripts": {
         "test": "phpunit",
         "test:acceptance": "php tests/Acceptance/run.php",
+        "test:package": "php tests/Acceptance/package.php",
+        "test:benchmark": "php tests/Acceptance/run.php --benchmark=250",
+        "docs": "php docs/build.php",
         "format": "pint",
         "lint": "pint --test"
     },

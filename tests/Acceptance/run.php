@@ -6,6 +6,9 @@ use Symfony\Component\Process\Process;
 
 require dirname(__DIR__, 2).'/vendor/autoload.php';
 
+$options = getopt('', ['package:', 'benchmark:']);
+$benchmark = isset($options['benchmark']) ? max(1, min(1000, (int) $options['benchmark'])) : 0;
+
 $files = new Filesystem;
 $directory = sys_get_temp_dir().'/clearance-acceptance-'.bin2hex(random_bytes(8));
 $files->copyDirectory(__DIR__.'/application', $directory);
@@ -24,6 +27,18 @@ $manifest = [
     'scripts' => ['post-autoload-dump' => ['@php artisan package:discover --ansi']],
     'config' => ['allow-plugins' => ['pestphp/pest-plugin' => true], 'audit' => ['block-insecure' => true]],
 ];
+if (isset($options['package'])) {
+    $archive = realpath($options['package']);
+    if ($archive === false || ! is_file($archive)) {
+        throw new RuntimeException('Supply an existing package archive.');
+    }
+    $package = json_decode(file_get_contents(dirname(__DIR__, 2).'/composer.json'), true, 512, JSON_THROW_ON_ERROR);
+    $package['version'] = '1.0.0';
+    $package['dist'] = ['type' => 'zip', 'url' => 'file://'.$archive, 'reference' => hash_file('sha256', $archive)];
+    unset($package['require-dev'], $package['autoload-dev'], $package['scripts'], $package['config'], $package['repositories']);
+    $manifest['repositories'] = [['type' => 'package', 'package' => $package]];
+    $manifest['require-dev']['dgtlss/clearance'] = '1.0.0';
+}
 $files->put($directory.'/composer.json', json_encode($manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR)."\n");
 $env = [
     'APP_ENV' => 'testing', 'APP_KEY' => 'base64:'.base64_encode(str_repeat('a', 32)), 'APP_URL' => 'http://localhost',
@@ -66,8 +81,15 @@ $artisan(['clearance:install']);
 $check($configHash === hash_file('sha256', $directory.'/config/clearance.php') && $personaHash === hash_file('sha256', $directory.'/app/Clearance/Personas.php'), 'Installer overwrote host configuration.');
 $artisan(['vendor:publish', '--provider=Spatie\Permission\PermissionServiceProvider', '--tag=permission-migrations']);
 $artisan(['migrate', '--force']);
+if ($benchmark > 0) {
+    $files->append($directory.'/routes/web.php', "\nfor (\$i = 0; \$i < ".$benchmark."; \$i++) {\n    Route::get('/benchmark/'.\$i.'/{order}', [OrderController::class, 'show'])->middleware('auth')->name('acceptance.benchmark.'.\$i);\n}\n");
+}
+$started = hrtime(true);
 $matrix = $json($artisan(['clearance:verify', '--json']));
-$check(count($matrix['routes']) === 7 && $matrix['summary']['scenarios'] === 49 && $matrix['summary']['responses'] === 49, 'Expected a complete seven-route, 49-scenario baseline.');
+$seconds = (hrtime(true) - $started) / 1e9;
+$routes = 7 + 2 * $benchmark;
+$scenarios = 7 * $routes;
+$check(count($matrix['routes']) === $routes && $matrix['summary']['scenarios'] === $scenarios && $matrix['summary']['responses'] === $scenarios, 'Expected a complete '.$routes.'-route, '.$scenarios.'-scenario baseline.');
 $check($matrix['summary']['incomplete'] === [], 'Fresh app verification is incomplete.');
 foreach ($matrix['routes'] as $id => $route) {
     $check($route['access']['guest'] === 'deny', 'Guest reached '.$id);
@@ -75,6 +97,17 @@ foreach ($matrix['routes'] as $id => $route) {
     foreach (['staff', 'admin'] as $role) {
         $check($route['access'][$role] === ['foreign' => 'allow', 'owned' => 'allow'], $role.' could not access '.$id);
     }
+}
+
+if ($benchmark > 0) {
+    $check($seconds < 300, 'Verification exceeded the five-minute target.');
+    $db = new PDO('sqlite:'.$directory.'/database/database.sqlite');
+    $check((int) $db->query('select count(*) from orders')->fetchColumn() === 0, 'Benchmark left fixture records.');
+    $db = null;
+    fwrite(STDOUT, json_encode(['routes' => $routes, 'scenarios' => $scenarios, 'seconds' => round($seconds, 3), 'php' => PHP_VERSION, 'laravel' => InstalledVersions::getPrettyVersion('laravel/framework'), 'database' => 'sqlite', 'fixture' => 'synthetic Spatie ownership routes; warm dependencies; includes host bootstrap'], JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR)."\n");
+    $files->deleteDirectory($directory);
+
+    exit(0);
 }
 
 // Exercise both supported harness entry points using the same host app and middleware.

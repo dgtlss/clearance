@@ -4,6 +4,7 @@ namespace Dgtlss\Clearance\Tests\Fixtures;
 
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Storage;
 
@@ -103,5 +104,23 @@ class FixtureController extends Controller
     public function scoped(Request $request): array
     {
         return Order::query()->where('user_id', $request->user()->id)->get()->toArray();
+    }
+
+    public function upload(UploadOrderRequest $request, Order $order): array
+    {
+        $request->file('document')->storeAs('uploads', 'fixture.txt', 'local');
+        $request->file('files.photo')->storeAs('uploads', 'fixture.png', 'local');
+        $order->update(['title' => 'Uploaded']);
+
+        return ['ok' => true];
+    }
+
+    public function dualWrite(Order $order): array
+    {
+        Gate::authorize('update', $order);
+        $order->update(['title' => 'Updated on primary']);
+        DB::connection('secondary')->table('audit_entries')->insert(['message' => 'Updated on secondary']);
+
+        return ['ok' => true];
     }
 }

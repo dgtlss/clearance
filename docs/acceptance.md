@@ -6,6 +6,9 @@ Run the package suite and the normal Artisan workflow:
 composer install
 composer test
 composer test:acceptance
+composer test:package
+composer test:benchmark
+composer docs
 composer lint
 composer validate --strict
 ```
@@ -40,3 +43,25 @@ then mount that copy at `/work` in the image. Resolve the dependency constraints
 from the relevant workflow matrix entry with `composer update --with=...`, then
 run the commands above. Keep each combination's vendor directory separate.
 Hosted Actions status remains a separate release check after the commit is pushed.
+
+`test:package` builds and inspects a ZIP, rejects development/private artifacts and
+installs that exact artifact in the fresh app. `test:benchmark` generates 250 more
+GET/HEAD pairs: 507 route entries and 3,549 real scenarios. It asserts all expected
+access and rollback, reports verification duration separately, and fails above
+five minutes. Dependencies are warm; downloads and initial app setup are excluded.
+
+Optional integration jobs install published packages rather than doubles:
+Filament 4/Livewire 3 on Laravel 12 with Warden 2.2, Advisor 1.1 and Sanctum 4;
+Filament 5/Livewire 4 on Laravel 13 with Warden and Sanctum. Focused tests fail on
+skips so an absent dependency cannot make an integration job appear successful.
+Advisor's upstream constraints currently exclude Laravel 13.
+
+`DatabaseIsolationTest` runs on SQLite in the normal suite. SQL jobs run it alone
+with `CLEARANCE_TEST_DB_DRIVER=mysql` or `pgsql`, two distinct disposable
+`CLEARANCE_TEST_DATABASE` / `CLEARANCE_TEST_SECONDARY_DATABASE` values prefixed
+`clearance_`, and explicit host/user/password variables. It creates/drops fixture
+tables, so use the disposable CI services. It checks real HTTP ownership outcomes,
+rollback on both connections and zero remaining rows/transactions.
+
+`composer docs` builds a static site under `build/docs`, validates relative file
+links and includes no publishing step. Open `build/docs/index.html` locally.

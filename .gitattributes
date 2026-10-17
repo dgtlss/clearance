@@ -1,0 +1,15 @@
+/tests export-ignore
+/.github export-ignore
+/.phpunit* export-ignore
+/.gitignore export-ignore
+/.gitattributes export-ignore
+/.DS_Store export-ignore
+/AGENTS.md export-ignore
+/composer.lock export-ignore
+/phpunit.xml export-ignore
+/pint.json export-ignore
+/.env* export-ignore
+/auth.json export-ignore
+/node_modules export-ignore
+/build export-ignore
+/docs/build.php export-ignore

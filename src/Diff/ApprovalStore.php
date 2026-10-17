@@ -3,16 +3,18 @@
 namespace Dgtlss\Clearance\Diff;
 
 use Dgtlss\Clearance\Matrix\CanonicalJson;
+use Dgtlss\Clearance\Matrix\Entries;
 use InvalidArgumentException;
 
 final class ApprovalStore
 {
     public function apply(array $matrix, array $baseline): array
     {
-        foreach ($baseline['routes'] as $id => $route) {
-            if (isset($matrix['routes'][$id]) && $this->valid($route)
-                && $this->hash($route) === $this->hash($matrix['routes'][$id])) {
-                $matrix['routes'][$id]['approved'] ??= $route['approved'];
+        foreach (Entries::all($baseline) as $id => $route) {
+            $section = Entries::section($id);
+            if (isset($matrix[$section][$id]) && $this->valid($route)
+                && $this->hash($route) === $this->hash($matrix[$section][$id])) {
+                $matrix[$section][$id]['approved'] ??= $route['approved'];
             }
         }
         if ($this->validCoverage($baseline) && CanonicalJson::sort($baseline['scope'] ?? []) === CanonicalJson::sort($matrix['scope'] ?? [])) {

@@ -5,6 +5,7 @@ namespace Dgtlss\Clearance\Integrations;
 use Dgtlss\Clearance\Clearance;
 use Dgtlss\Clearance\Diff\ApprovalStore;
 use Dgtlss\Clearance\Diff\MatrixDiff;
+use Dgtlss\Clearance\Matrix\Entries;
 use Dgtlss\Clearance\Matrix\LockFile;
 use Dgtlss\Clearance\Report\Findings;
 use Dgtlss\Clearance\Testing\TestHarness;
@@ -50,8 +51,8 @@ final class WardenAudit implements CustomAudit
                 severity: Severity::High,
                 description: $change['route'].': '.$change['message'],
                 remediation: 'Review the access change and run clearance:approve with a reason.',
-                path: $matrix['routes'][$change['route']]['source']['file'] ?? null,
-                line: $matrix['routes'][$change['route']]['source']['line'] ?? null,
+                path: Entries::all($matrix)[$change['route']]['source']['file'] ?? null,
+                line: Entries::all($matrix)[$change['route']]['source']['line'] ?? null,
                 metadata: ['owasp' => 'A01', 'route' => $change['route']],
                 identity: $change['route'].'|'.($change['persona'] ?? '*'),
             ), $changes);

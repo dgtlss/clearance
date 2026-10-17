@@ -4,6 +4,7 @@ namespace Dgtlss\Clearance\Console;
 
 use Dgtlss\Clearance\Diff\ApprovalStore;
 use Dgtlss\Clearance\Diff\MatrixDiff;
+use Dgtlss\Clearance\Matrix\Entries;
 use Dgtlss\Clearance\Matrix\LockFile;
 use InvalidArgumentException;
 
@@ -37,6 +38,9 @@ final class ApproveCommand extends ClearanceCommand
         }
 
         $before = $exists ? app(LockFile::class)->read() : null;
+        if ($before !== null && $before['schema'] !== 2) {
+            throw new \RuntimeException('Run clearance:migrate --reason="..." before approving changes to a legacy baseline.', 3);
+        }
         $matrix = $this->verify();
 
         if ($before !== null && ($before['personas'] !== $matrix['personas'] || $before['expected_all'] !== $matrix['expected_all'])) {
@@ -53,7 +57,7 @@ final class ApproveCommand extends ClearanceCommand
 
         if ($this->option('coverage')) {
             foreach (app(MatrixDiff::class)->blocking(app(MatrixDiff::class)->compare($before, $matrix)) as $change) {
-                if ($change['type'] !== 'coverage_lost' || ($change['route'] !== '(scope)' && isset($matrix['routes'][$change['route']]))) {
+                if ($change['type'] !== 'coverage_lost' || ($change['route'] !== '(scope)' && isset(Entries::all($matrix)[$change['route']]))) {
                     throw new \RuntimeException('Coverage approval cannot approve access, guard or scenario changes. Review those routes separately.', 1);
                 }
             }
@@ -61,22 +65,33 @@ final class ApproveCommand extends ClearanceCommand
             $reviewed['scope'] = $matrix['scope'];
             $reviewed['inventory'] = $matrix['inventory'];
             $reviewed['routes'] = array_intersect_key($before['routes'], $matrix['routes']);
+            $reviewed['surfaces'] = array_intersect_key($before['surfaces'], $matrix['surfaces']);
+            $reviewed['surface_inventory'] = $matrix['surface_inventory'];
+            $reviewed['collectors'] = $matrix['collectors'];
             $matrix = $store->approveCoverage($reviewed, $reason, $by);
         } elseif ($this->option('all-new')) {
             foreach ($matrix['routes'] as &$route) {
                 $route = $store->approve($route, $reason, $by);
             }
             unset($route);
+            foreach ($matrix['surfaces'] as &$surface) {
+                $surface = $store->approve($surface, $reason, $by);
+            }
+            unset($surface);
         } else {
             $id = $this->argument('route');
 
-            if (! is_string($id) || ! isset($matrix['routes'][$id])) {
+            $section = is_string($id) ? Entries::section($id) : 'routes';
+            if (! is_string($id) || ! isset($matrix[$section][$id])) {
                 throw new InvalidArgumentException('Supply an exact discovered route identifier, for example "PUT orders/{order}".');
             }
 
             $persona = $this->option('persona');
 
             if ($persona !== null) {
+                if ($section === 'surfaces') {
+                    throw new InvalidArgumentException('Static-only surfaces have no verified persona access; approve the whole surface.');
+                }
                 if (! in_array($persona, $matrix['personas'], true)) {
                     throw new InvalidArgumentException("Unknown persona [{$persona}].");
                 }
@@ -91,12 +106,17 @@ final class ApproveCommand extends ClearanceCommand
             }
 
             // Update only the requested route; all other widening must remain visible to clearance:check.
-            $approved = $store->approve($matrix['routes'][$id], $reason, $by, $persona);
+            $approved = $store->approve($matrix[$section][$id], $reason, $by, $persona);
+            $collectors = $matrix['collectors'];
             $matrix = $before;
-            $matrix['routes'][$id] = $approved;
-            if (isset($matrix['inventory'])) {
-                $matrix['inventory'] = array_values(array_unique([...$matrix['inventory'], $id]));
-                sort($matrix['inventory']);
+            $matrix[$section][$id] = $approved;
+            $inventory = $section === 'surfaces' ? 'surface_inventory' : 'inventory';
+            if (isset($matrix[$inventory])) {
+                $matrix[$inventory] = array_values(array_unique([...$matrix[$inventory], $id]));
+                sort($matrix[$inventory]);
+            }
+            if ($section === 'surfaces') {
+                $matrix['collectors'] = $collectors;
             }
         }
 

@@ -73,6 +73,22 @@ final class Findings
             }
         }
 
+        foreach ($matrix['surfaces'] ?? [] as $id => $profile) {
+            $review = $this->approvals->valid($profile) ? $profile['approved']['reason'] : null;
+            if ($profile['kind'] === 'livewire' && $profile['verdict'] === 'unguarded') {
+                $findings[] = $this->finding('high', $id, 'Static-only: action contains a visible mutation without a visible authorization check.', $profile, review: $review);
+            } elseif ($profile['kind'] === 'filament' && $profile['verdict'] === 'unguarded') {
+                $findings[] = $this->finding('high', $id, 'Static-only: resource/page has missing policy coverage, unconditional access, or skipped authorization. Review its overrides.', $profile, review: $review);
+            } elseif ($profile['verdict'] === 'unknown') {
+                $findings[] = $this->finding('medium', $id, 'Static-only: authorization could not be established. Runtime component actions are not verified.', $profile, review: $review);
+            }
+            foreach ($profile['guards']['policies'] as $policy) {
+                if (in_array($policy['method'], ['view', 'update', 'delete', 'forceDelete', 'restore', 'replicate'], true) && ! $policy['instance_aware']) {
+                    $findings[] = $this->finding('medium', $id, 'Static-only: policy '.$policy['class'].'@'.$policy['method'].' does not reference the model instance.', $profile, review: $review);
+                }
+            }
+        }
+
         $rank = ['critical' => 0, 'high' => 1, 'medium' => 2, 'info' => 3];
         usort($findings, fn (array $a, array $b) => [$rank[$a['severity']], $a['route'], $a['message']] <=> [$rank[$b['severity']], $b['route'], $b['message']]);
 

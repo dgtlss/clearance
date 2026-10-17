@@ -3,7 +3,6 @@
 namespace Dgtlss\Clearance\Static;
 
 use Closure;
-use Composer\InstalledVersions;
 use Dgtlss\Clearance\Attributes\Expect;
 use Dgtlss\Clearance\Discovery\MiddlewareResolver;
 use Dgtlss\Clearance\Static\CheckDetectors\AuthorizationDetector;
@@ -25,6 +24,7 @@ final class RouteAnalyzer
         private readonly AstIndex $ast,
         private readonly MiddlewareResolver $middleware,
         private readonly PolicyAnalyzer $policies,
+        private readonly SourceLocation $sources,
     ) {}
 
     public function analyze(Route $route, string $method): array
@@ -83,7 +83,7 @@ final class RouteAnalyzer
 
             if ($reflection) {
                 $file = $reflection->getFileName();
-                $profile['source'] = $file ? ['file' => $this->relativePath($file), 'line' => $reflection->getStartLine()] : null;
+                $profile['source'] = $file ? $this->sources->forFile($file, $reflection->getStartLine()) : null;
 
                 foreach ($reflection->getParameters() as $parameter) {
                     $type = $parameter->getType();
@@ -238,35 +238,5 @@ final class RouteAnalyzer
             'destroy' => 'delete',
             default => in_array($method, ['GET', 'HEAD'], true) ? 'view' : 'update',
         }];
-    }
-
-    private function relativePath(string $path): string
-    {
-        $base = rtrim(base_path(), DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR;
-
-        if (str_starts_with($path, $base)) {
-            return substr($path, strlen($base));
-        }
-
-        $roots = [];
-
-        foreach (InstalledVersions::getInstalledPackages() as $package) {
-            $install = InstalledVersions::getInstallPath($package);
-            $root = $install !== null ? realpath($install) : false;
-
-            if ($root !== false) {
-                $roots[$root.DIRECTORY_SEPARATOR] = 'vendor/'.$package.'/';
-            }
-        }
-
-        uksort($roots, fn (string $a, string $b) => strlen($b) <=> strlen($a));
-
-        foreach ($roots as $root => $relative) {
-            if (str_starts_with($path, $root)) {
-                return $relative.substr($path, strlen($root));
-            }
-        }
-
-        return 'external/'.basename($path);
     }
 }

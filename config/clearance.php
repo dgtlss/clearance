@@ -31,15 +31,22 @@ return [
         'ability_middleware' => ['can', 'role', 'permission'],
         'custom_checks' => [],
         'detectors' => [],
+        'livewire' => true,
+        'filament' => true,
+        'livewire_components' => [],
+        'livewire_paths' => [],
+        'surfaces_include' => ['*'],
+        'surfaces_exclude' => [],
     ],
 
     'gate' => [
-        'fail_on' => ['widening', 'guard_removed', 'instance_blind', 'coverage_lost'],
+        'fail_on' => ['widening', 'guard_removed', 'instance_blind', 'coverage_lost', 'surface_added', 'static_changed'],
         'max_errors' => 0,
     ],
 
     'report' => [
         'github_annotations' => env('GITHUB_ACTIONS', false),
         'warden' => true,
+        'owasp_advisor' => true,
     ],
 ];

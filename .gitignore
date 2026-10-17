@@ -11,3 +11,7 @@
 /.phpunit-coverage/
 /.idea/
 /.DS_Store
+/.env*
+/auth.json
+/node_modules/
+/build/

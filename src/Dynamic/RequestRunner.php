@@ -19,6 +19,7 @@ use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
+use Symfony\Component\HttpFoundation\File\UploadedFile;
 use Throwable;
 
 final class RequestRunner
@@ -113,9 +114,10 @@ final class RequestRunner
                 $payload = [];
             }
             $payload ??= $this->payloads->build($route, $profile, $id, $request);
+            $uploads = $this->uploads($payload);
 
             // Use the kernel directly so a host test's followingRedirects() cannot hide a login redirect.
-            $httpRequest = Request::create($url, $method, $payload, [], [], ['HTTP_ACCEPT' => 'application/json']);
+            $httpRequest = Request::create($url, $method, $payload, [], $uploads, ['HTTP_ACCEPT' => 'application/json']);
             $kernel = app(Kernel::class);
             $response = $kernel->handle($httpRequest);
             $kernel->terminate($httpRequest, $response);
@@ -157,7 +159,9 @@ final class RequestRunner
         } catch (Throwable $e) {
             return ['outcome' => 'error', 'status' => null, 'category' => 'scenario_error', 'reason' => 'Scenario failed: '.$e::class];
         } finally {
+            $endedTransaction = false;
             foreach (array_reverse($connections) as [$connection, $level]) {
+                $endedTransaction = $endedTransaction || $connection->transactionLevel() <= $level;
                 $connection->rollBack($level);
             }
 
@@ -173,7 +177,28 @@ final class RequestRunner
             app('auth')->shouldUse($defaultGuard);
             app()->instance('request', $originalRequest);
             \Illuminate\Support\Facades\Request::clearResolvedInstance('request');
+            if ($endedTransaction) {
+                throw new RuntimeException('Application code ended a Clearance transaction. Verification stopped; use a disposable testing database and isolate this route.');
+            }
         }
+    }
+
+    private function uploads(array &$payload): array
+    {
+        $files = [];
+        foreach ($payload as $key => &$value) {
+            if ($value instanceof UploadedFile) {
+                $files[$key] = $value;
+                unset($payload[$key]);
+            } elseif (is_array($value)) {
+                $nested = $this->uploads($value);
+                if ($nested !== []) {
+                    $files[$key] = $nested;
+                }
+            }
+        }
+
+        return $files;
     }
 
     private function fakes(): array

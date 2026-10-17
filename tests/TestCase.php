@@ -20,7 +20,14 @@ abstract class TestCase extends Orchestra
 {
     protected function getPackageProviders($app): array
     {
-        return [ClearanceServiceProvider::class];
+        $providers = [];
+        foreach (['Livewire\\LivewireServiceProvider', 'Filament\\Support\\SupportServiceProvider', 'Filament\\FilamentServiceProvider', 'Laravel\\Sanctum\\SanctumServiceProvider', 'dgtlss\\OWASPAdvisor\\OWASPAdvisorServiceProvider'] as $provider) {
+            if (class_exists($provider)) {
+                $providers[] = $provider;
+            }
+        }
+
+        return [...$providers, ClearanceServiceProvider::class];
     }
 
     protected function defineEnvironment($app): void
@@ -29,6 +36,26 @@ abstract class TestCase extends Orchestra
         $app['config']->set('app.url', 'http://localhost');
         $app['config']->set('database.default', 'testing');
         $app['config']->set('database.connections.testing', ['driver' => 'sqlite', 'database' => ':memory:', 'foreign_key_constraints' => true]);
+        $driver = getenv('CLEARANCE_TEST_DB_DRIVER') ?: 'sqlite';
+        if ($driver !== 'sqlite') {
+            $database = getenv('CLEARANCE_TEST_DATABASE') ?: '';
+            $secondary = getenv('CLEARANCE_TEST_SECONDARY_DATABASE') ?: '';
+            if (! in_array($driver, ['mysql', 'pgsql'], true) || ! str_starts_with($database, 'clearance_') || ! str_starts_with($secondary, 'clearance_') || $database === $secondary) {
+                throw new \RuntimeException('Database integration tests require two distinct disposable clearance_* databases.');
+            }
+            $app['config']->set('database.connections.testing', [
+                'driver' => $driver, 'host' => getenv('CLEARANCE_TEST_DB_HOST') ?: '127.0.0.1',
+                'port' => getenv('CLEARANCE_TEST_DB_PORT') ?: ($driver === 'mysql' ? 3306 : 5432),
+                'database' => $database, 'username' => getenv('CLEARANCE_TEST_DB_USER') ?: 'clearance',
+                'password' => getenv('CLEARANCE_TEST_DB_PASSWORD') ?: '',
+                'charset' => $driver === 'mysql' ? 'utf8mb4' : 'utf8', 'collation' => 'utf8mb4_unicode_ci', 'prefix' => '',
+            ]);
+        }
+        $connection = $app['config']->get('database.connections.testing');
+        if ($driver !== 'sqlite') {
+            $connection['database'] = getenv('CLEARANCE_TEST_SECONDARY_DATABASE');
+        }
+        $app['config']->set('database.connections.secondary', $connection);
         $app['config']->set('auth.providers.users.model', User::class);
         $app['config']->set('clearance.personas', FixturePersonas::class);
         $app['config']->set('clearance.routes.include', ['fixture.*']);
@@ -38,6 +65,9 @@ abstract class TestCase extends Orchestra
 
     protected function defineDatabaseMigrations(): void
     {
+        if ((getenv('CLEARANCE_TEST_DB_DRIVER') ?: 'sqlite') !== 'sqlite') {
+            Schema::dropAllTables();
+        }
         Schema::create('users', function (Blueprint $table) {
             $table->id();
             $table->string('name');
