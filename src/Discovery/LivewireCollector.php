@@ -73,7 +73,14 @@ final class LivewireCollector
                             if (is_subclass_of($name, 'Livewire\\Component')) {
                                 $classes[] = $name;
                             }
-                        } elseif ($node instanceof Node\Stmt\Class_ && $node->extends?->toString() === 'Livewire\\Component') {
+                        } elseif ($node instanceof Node\Stmt\Class_ && $node->extends !== null) {
+                            $base = $node->extends->toString();
+                            if (! class_exists($base)) {
+                                throw new \RuntimeException('Anonymous component base class could not be resolved: '.$base);
+                            }
+                            if (! is_a($base, 'Livewire\\Component', true)) {
+                                continue;
+                            }
                             $name = app(SourceLocation::class)->forFile($file, $node->getStartLine())['file'];
                             $origin = (realpath($file) ?: $file).':'.$node->getStartFilePos();
                             if (isset($templates[$name]) && $templates[$name] !== $origin) {
@@ -138,6 +145,9 @@ final class LivewireCollector
 
     private function callable(string $name, array $traits = []): bool
     {
+        if (method_exists('Livewire\\Component', $name)) {
+            return false;
+        }
         $blocked = ['render', 'mount', 'exception', 'hydrate*', 'dehydrate*', 'updating*', 'updated*', '__*'];
         if (class_exists('Livewire\\Finder\\Finder')) {
             $blocked = [...$blocked, 'boot', 'booted', 'rendering', 'rendered', 'scriptSrc'];
@@ -156,7 +166,17 @@ final class LivewireCollector
         $methods = [];
         $declared = array_fill_keys(array_map(fn ($method) => $method->name->toString(), $class->getMethods()), true);
         $locked = $this->locked($class);
-        $traits = [];
+        $base = new ReflectionClass($class->extends->toString());
+        $traits = array_values(class_uses_recursive($base->getName()));
+        $locked = [...$locked, ...$this->lockedProperties($base)];
+        foreach ($base->getMethods(ReflectionMethod::IS_PUBLIC) as $method) {
+            if ($method->getDeclaringClass()->getName() === 'Livewire\\Component' || isset($declared[$method->getName()])
+                || ! $this->callable($method->getName(), $traits)) {
+                continue;
+            }
+            $methods[$method->getName()] = $this->reflectedMethod($base->getName(), $method);
+        }
+        $imported = [];
         foreach ($class->stmts as $statement) {
             if (! $statement instanceof Node\Stmt\TraitUse) {
                 continue;
@@ -177,14 +197,11 @@ final class LivewireCollector
                     if (isset($declared[$methodName])) {
                         continue;
                     }
-                    if (isset($methods[$methodName])) {
+                    if (isset($imported[$methodName])) {
                         throw new \RuntimeException('Conflicting anonymous Livewire trait method: '.$methodName);
                     }
-                    $node = $this->ast->method($name, $methodName);
-                    if ($node === null) {
-                        throw new \RuntimeException('Anonymous Livewire trait source could not be resolved: '.$name.'@'.$methodName);
-                    }
-                    $methods[$methodName] = [$node, $method->getFileName(), $method->isPublic(), $method->isStatic()];
+                    $imported[$methodName] = true;
+                    $methods[$methodName] = $this->reflectedMethod($name, $method);
                 }
             }
         }
@@ -195,6 +212,16 @@ final class LivewireCollector
         sort($locked);
 
         return [$methods, $locked, array_unique($traits)];
+    }
+
+    private function reflectedMethod(string $class, ReflectionMethod $method): array
+    {
+        $node = $this->ast->method($class, $method->getName());
+        if ($node === null) {
+            throw new \RuntimeException('Livewire action source could not be resolved: '.$class.'@'.$method->getName());
+        }
+
+        return [$node, $method->getFileName(), $method->isPublic(), $method->isStatic()];
     }
 
     private function lockedProperties(ReflectionClass $class): array

@@ -210,6 +210,16 @@ class StaticSurfacesTest extends TestCase
             $this->assertSame(['recordId'], $after['surfaces'][$id]['locked_properties']);
             $changes = app(MatrixDiff::class)->blocking(app(MatrixDiff::class)->compare($before, $after));
             $this->assertContains('guard_removed', array_column($changes, 'type'));
+            $base = $directory.'/BaseEditor.php';
+            file_put_contents($base, '<?php namespace '.$namespace.'; abstract class BaseEditor extends \\Livewire\\Component { use Edits; }');
+            require $base;
+            file_put_contents($file, '<?php return new class extends \\'.$namespace.'\\BaseEditor {};');
+            $inherited = app(Clearance::class)->scan();
+            $this->assertSame('complete', $inherited['collectors']['livewire']['status']);
+            $this->assertArrayHasKey($id, $inherited['surfaces']);
+            $this->assertSame(['recordId'], $inherited['surfaces'][$id]['locked_properties']);
+            $component = require $file;
+            $this->assertSame('dummy', $component->saveOrder());
             file_put_contents($file, '<?php new class extends \\Livewire\\Component { use \\'.$namespace.'\\Edits { saveOrder as private; } };');
             $incomplete = app(Clearance::class)->scan();
             $this->assertSame('error', $incomplete['collectors']['livewire']['status']);
