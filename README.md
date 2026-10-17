@@ -15,8 +15,11 @@ notices the `authorize()` call is missing. Clearance makes that access visible.
 
 ## Install
 
+Add the GitHub repository to Composer, then install Clearance:
+
 ```bash
-composer require dgtlss/clearance --dev
+composer config repositories.clearance vcs https://github.com/dgtlss/clearance.git
+composer require dgtlss/clearance:^1.0 --dev
 php artisan clearance:install
 ```
 

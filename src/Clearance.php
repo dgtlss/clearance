@@ -12,7 +12,7 @@ use Dgtlss\Clearance\Static\SourceLocation;
 
 final class Clearance
 {
-    public const VERSION = '1.0.0-dev';
+    public const VERSION = '1.0.0';
 
     public function __construct(private readonly RouteCollector $routes, private readonly RouteAnalyzer $analyzer, private readonly PersonaRegistry $personas) {}
 

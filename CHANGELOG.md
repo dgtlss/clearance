@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Changes on main]
+## [1.0.0] - 2026-10-17
 
 ### Added
 
@@ -73,4 +73,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Transactions cover only the default and configured database connections; DDL, explicit commits, direct filesystem writes, raw sockets, and external SDKs can escape isolation.
 - No hard per-request timeout. Slow completed scenarios, including setup, are detected; the generated test subprocess has a configurable timeout.
 
-[Changes on main]: https://github.com/dgtlss/clearance/commits/main
+[1.0.0]: https://github.com/dgtlss/clearance/releases/tag/v1.0.0

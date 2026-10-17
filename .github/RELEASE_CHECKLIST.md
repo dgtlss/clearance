@@ -26,9 +26,9 @@ Verification evidence is in [docs/v1-validation.md](../docs/v1-validation.md).
 - [ ] Collect integration feedback, including setup and false positives, without exposing private consumer data.
 - [ ] Resolve any resulting blockers and repeat affected checks.
 - [x] Merge the reviewed changes into `main` and verify the merge commit and hosted checks.
-- [ ] Verify GitHub detects the MIT license and private vulnerability reporting remains enabled.
+- [x] Verify GitHub detects the MIT license and private vulnerability reporting remains enabled.
 - [ ] Set the repository description/topics and recheck package-name availability and search overlap.
-- [ ] On release day, group the changelog notes under the version and actual release date, and add the corresponding comparison/tag links.
+- [x] Group the changelog notes under `1.0.0` and the release date, 17 October 2026, with the corresponding tag link.
 
 ## Tag and publish
 
