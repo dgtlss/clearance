@@ -65,7 +65,7 @@ jobs:
         run: composer require --dev --no-update 'dgtlss/owaspadvisor:1.1.*'
       - run: composer update --prefer-dist --no-interaction --with='laravel/framework:${{ matrix.laravel }}' --with='orchestra/testbench:${{ matrix.testbench }}' --with='phpunit/phpunit:${{ matrix.phpunit }}' --with='pestphp/pest:${{ matrix.pest }}'
       - run: composer test
-      - run: vendor/bin/phpunit --filter 'test_livewire_real|test_filament_real|ApiAuthenticationTest|WardenIntegrationTest' --fail-on-skipped
+      - run: vendor/bin/phpunit --filter 'test_livewire_real|test_livewire_overrides|test_filament_real|test_filament_trait|test_anonymous_livewire|test_ambiguous_external|ApiAuthenticationTest|WardenIntegrationTest' --fail-on-skipped
       - if: matrix.advisor
         run: vendor/bin/phpunit --filter AdvisorIntegrationTest --fail-on-skipped
       - if: ${{ !matrix.advisor }}

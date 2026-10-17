@@ -373,9 +373,12 @@ class VerificationTest extends TestCase
 
             return Create::promiseFor(new Response(200, [], '{}'));
         };
+        Http::fake(['https://clearance.example.invalid/faked' => Http::response(['fixture' => 'dummy'])]);
         Http::allowStrayRequests(['https://clearance.example.invalid/*']);
         $original = Http::getFacadeRoot();
-        app('router')->get('/allowlisted-http', function () use ($transport) {
+        $fakes = [];
+        app('router')->get('/allowlisted-http', function () use ($transport, &$fakes) {
+            $fakes[] = Http::get('https://clearance.example.invalid/faked')->json('fixture');
             Http::withOptions([])->setHandler($transport)->get('https://clearance.example.invalid/write');
 
             return ['ok' => true];
@@ -383,6 +386,7 @@ class VerificationTest extends TestCase
         config(['clearance.routes.include' => ['fixture.allowlisted-http']]);
         $profile = app(Verifier::class)->run($this)['routes']['GET allowlisted-http'];
         $this->assertSame(0, $calls);
+        $this->assertSame(array_fill(0, 6, 'dummy'), $fakes);
         $this->assertSame(array_fill_keys(['admin', 'customer', 'guest'], 'error'), $profile['access']);
         $this->assertSame($original, Http::getFacadeRoot());
         Http::withOptions([])->setHandler($transport)->get('https://clearance.example.invalid/write');

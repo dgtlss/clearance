@@ -145,9 +145,6 @@ final class LivewireCollector
 
     private function callable(string $name, array $traits = []): bool
     {
-        if (method_exists('Livewire\\Component', $name)) {
-            return false;
-        }
         $blocked = ['render', 'mount', 'exception', 'hydrate*', 'dehydrate*', 'updating*', 'updated*', '__*'];
         if (class_exists('Livewire\\Finder\\Finder')) {
             $blocked = [...$blocked, 'boot', 'booted', 'rendering', 'rendered', 'scriptSrc'];
@@ -165,10 +162,18 @@ final class LivewireCollector
     {
         $methods = [];
         $declared = array_fill_keys(array_map(fn ($method) => $method->name->toString(), $class->getMethods()), true);
-        $locked = $this->locked($class);
         $base = new ReflectionClass($class->extends->toString());
         $traits = array_values(class_uses_recursive($base->getName()));
-        $locked = [...$locked, ...$this->lockedProperties($base)];
+        $directLocked = array_fill_keys($this->locked($class), true);
+        $baseLocked = array_fill_keys($this->lockedProperties($base), true);
+        $locked = $baseLocked;
+        $declaredProperties = [];
+        foreach ($class->getProperties() as $property) {
+            foreach ($property->props as $prop) {
+                $declaredProperties[$prop->name->toString()] = true;
+                unset($locked[$prop->name->toString()]);
+            }
+        }
         foreach ($base->getMethods(ReflectionMethod::IS_PUBLIC) as $method) {
             if ($method->getDeclaringClass()->getName() === 'Livewire\\Component' || isset($declared[$method->getName()])
                 || ! $this->callable($method->getName(), $traits)) {
@@ -177,6 +182,7 @@ final class LivewireCollector
             $methods[$method->getName()] = $this->reflectedMethod($base->getName(), $method);
         }
         $imported = [];
+        $importedProperties = [];
         foreach ($class->stmts as $statement) {
             if (! $statement instanceof Node\Stmt\TraitUse) {
                 continue;
@@ -191,7 +197,24 @@ final class LivewireCollector
                 }
                 $traits = [...$traits, $name, ...array_values(class_uses_recursive($name))];
                 $reflection = new ReflectionClass($name);
-                $locked = [...$locked, ...$this->lockedProperties($reflection)];
+                $traitLocked = array_fill_keys($this->lockedProperties($reflection), true);
+                foreach ($reflection->getProperties() as $property) {
+                    $propertyName = $property->getName();
+                    $isLocked = isset($traitLocked[$propertyName]);
+                    if (isset($declaredProperties[$propertyName])) {
+                        continue;
+                    }
+                    // PHP versions differ on attribute precedence when a trait redeclares a base property.
+                    if ($base->hasProperty($propertyName) && ! $base->getProperty($propertyName)->isPrivate()
+                        && isset($baseLocked[$propertyName]) !== $isLocked) {
+                        throw new \RuntimeException('Conflicting anonymous Livewire property attributes: '.$propertyName);
+                    }
+                    if (array_key_exists($propertyName, $importedProperties) && $importedProperties[$propertyName] !== $isLocked) {
+                        throw new \RuntimeException('Conflicting anonymous Livewire trait property: '.$propertyName);
+                    }
+                    $importedProperties[$propertyName] = $isLocked;
+                    $locked[$propertyName] = $isLocked;
+                }
                 foreach ($reflection->getMethods() as $method) {
                     $methodName = $method->getName();
                     if (isset($declared[$methodName])) {
@@ -208,7 +231,7 @@ final class LivewireCollector
         foreach ($class->getMethods() as $method) {
             $methods[$method->name->toString()] = [$method, $file, $method->isPublic(), $method->isStatic()];
         }
-        $locked = array_values(array_unique($locked));
+        $locked = [...array_keys($directLocked), ...array_keys(array_filter($locked))];
         sort($locked);
 
         return [$methods, $locked, array_unique($traits)];

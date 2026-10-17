@@ -19,6 +19,7 @@ use Dgtlss\Clearance\Tests\TestCase;
 use Filament\Panel;
 use Filament\PanelRegistry;
 use Filament\Resources\ResourceConfiguration;
+use Livewire\Drawer\Utils;
 
 class StaticSurfacesTest extends TestCase
 {
@@ -247,6 +248,84 @@ class StaticSurfacesTest extends TestCase
             $result = app(LivewireCollector::class)->collect();
             $this->assertSame('error', $result['status']);
             $this->assertStringContainsString('Ambiguous anonymous Livewire identity', implode(' ', $result['diagnostics']));
+        } finally {
+            app('files')->deleteDirectory($directory);
+        }
+    }
+
+    public function test_anonymous_livewire_property_overrides_remove_inherited_locked_evidence(): void
+    {
+        if (! class_exists('Livewire\\Component')) {
+            $this->markTestSkipped('Optional Livewire integration job installs its real package.');
+        }
+        $directory = sys_get_temp_dir().'/clearance-properties-'.bin2hex(random_bytes(6));
+        mkdir($directory);
+        $namespace = 'ClearancePropertyFixture'.bin2hex(random_bytes(6));
+        $base = $directory.'/BaseEditor.php';
+        file_put_contents($base, '<?php namespace '.$namespace.'; abstract class BaseEditor extends \\Livewire\\Component { #[\\Livewire\\Attributes\\Locked] public int $recordId = 1; public function saveOrder(): void {} } abstract class PlainEditor extends \\Livewire\\Component { public int $recordId = 1; public function saveOrder(): void {} } trait UnlockedRecord { public int $recordId = 1; } trait LockedRecord { #[\\Livewire\\Attributes\\Locked] public int $recordId = 1; }');
+        require $base;
+        $file = $directory.'/component.blade.php';
+        config(['clearance.detect.livewire_paths' => [$file]]);
+        $declaration = 'public int $recordId = 1;';
+        $cases = [
+            [$namespace.'\\BaseEditor', '', $declaration],
+            ['Livewire\\Component', 'use \\'.$namespace.'\\LockedRecord; public function saveOrder(): void {}', 'use \\'.$namespace.'\\LockedRecord; '.$declaration.' public function saveOrder(): void {}'],
+        ];
+        try {
+            foreach ($cases as [$parent, $original, $replacement]) {
+                file_put_contents($file, '<?php return new class extends \\'.$parent.' { '.$original.' };');
+                $before = app(Clearance::class)->scan();
+                $before['routes'] = [];
+                $this->assertSame('complete', $before['collectors']['livewire']['status']);
+                $id = array_key_first($before['surfaces']);
+                $this->assertSame(['recordId'], $before['surfaces'][$id]['locked_properties']);
+                $before['surfaces'][$id] = app(ApprovalStore::class)->approve($before['surfaces'][$id], 'Locked property reviewed', 'reviewer');
+                file_put_contents($file, '<?php return new class extends \\'.$parent.' { '.$replacement.' };');
+                $component = require $file;
+                $this->assertSame([], (new \ReflectionProperty($component, 'recordId'))->getAttributes('Livewire\\Features\\SupportLockedProperties\\BaseLocked', \ReflectionAttribute::IS_INSTANCEOF));
+                $after = app(Clearance::class)->scan();
+                $after['routes'] = [];
+                $this->assertSame('complete', $after['collectors']['livewire']['status']);
+                $this->assertSame([], $after['surfaces'][$id]['locked_properties']);
+                $this->assertContains('guard_removed', array_column(app(MatrixDiff::class)->blocking(app(MatrixDiff::class)->compare($before, $after)), 'type'));
+                $applied = app(ApprovalStore::class)->apply($after, $before);
+                $this->assertFalse(app(ApprovalStore::class)->valid($applied['surfaces'][$id]));
+            }
+            foreach (['BaseEditor' => 'UnlockedRecord', 'PlainEditor' => 'LockedRecord'] as $parent => $trait) {
+                file_put_contents($file, '<?php new class extends \\'.$namespace.'\\'.$parent.' { use \\'.$namespace.'\\'.$trait.'; };');
+                $incomplete = app(Clearance::class)->scan();
+                $this->assertSame('error', $incomplete['collectors']['livewire']['status']);
+                $this->assertStringContainsString('Conflicting anonymous Livewire property attributes', implode(' ', $incomplete['collectors']['livewire']['diagnostics']));
+                $this->assertContains('coverage_lost', array_column(app(MatrixDiff::class)->compare($before, $incomplete), 'type'));
+            }
+        } finally {
+            app('files')->deleteDirectory($directory);
+        }
+    }
+
+    public function test_livewire_overrides_of_framework_methods_remain_callable_surfaces(): void
+    {
+        if (! class_exists('Livewire\\Component')) {
+            $this->markTestSkipped('Optional Livewire integration job installs its real package.');
+        }
+        $directory = sys_get_temp_dir().'/clearance-overrides-'.bin2hex(random_bytes(6));
+        mkdir($directory);
+        $class = 'ClearanceOverrideFixture'.bin2hex(random_bytes(6));
+        $named = $directory.'/Editor.php';
+        $body = 'public function skipRender($html = null): void {}';
+        file_put_contents($named, '<?php class '.$class.' extends \\Livewire\\Component { '.$body.' }');
+        require $named;
+        $anonymous = $directory.'/component.blade.php';
+        file_put_contents($anonymous, '<?php return new class extends \\Livewire\\Component { '.$body.' };');
+        config(['clearance.detect.livewire_components' => [$class], 'clearance.detect.livewire_paths' => [$anonymous]]);
+        try {
+            foreach ([new $class, require $anonymous] as $component) {
+                $this->assertContains('skipRender', Utils::getPublicMethodsDefinedBySubClass($component));
+            }
+            $result = app(LivewireCollector::class)->collect();
+            $this->assertSame('complete', $result['status'], implode(' ', $result['diagnostics']));
+            $this->assertArrayHasKey('livewire '.$class.'@skipRender', $result['surfaces']);
+            $this->assertCount(2, array_filter($result['surfaces'], fn ($profile) => $profile['method'] === 'skipRender'));
         } finally {
             app('files')->deleteDirectory($directory);
         }
