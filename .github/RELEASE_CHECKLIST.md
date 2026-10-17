@@ -1,53 +1,46 @@
-# Clearance v0.1.0 beta: release checklist
+# Clearance v1: release checklist
 
-Owner: Nathan. Drafted 17 October 2026. **Announcement embargo: not before
+Owner: Nathan. Updated 17 October 2026. **Announcement embargo: not before
 17 November 2026**, after the Runnr launch window ending 16 November.
 
-This checklist records future release work. The beta is unreleased; preparing
-these files does not authorize tagging, publishing, or announcing it.
+The local v1 candidate is on `codex/v1-readiness`. This checklist does not
+authorize merging, tagging, publishing or announcements. Local evidence is in
+[docs/v1-validation.md](../docs/v1-validation.md).
 
-## 1. Code readiness
+## Local candidate preparation
 
-- [ ] All six jobs in `.github/workflows/tests.yml` are green for the release candidate, including PHP 8.3 with Laravel 12 and 13.
-- [x] Run the suite, fresh-app acceptance, lint and strict Composer validation locally across all six combinations, including PHP 8.3. See `docs/implementation.md`.
-- [x] Add the fresh-app Spatie acceptance workflow to each CI combination: install, verify, stable lock, deliberate regression, approval and explicit scope review.
-- [x] Protect against lost route/scenario coverage and distinguish reviewed foreign access from unreviewed findings.
-- [ ] Test suite, `composer lint`, and `composer validate --strict` pass on the reviewed `main` release candidate.
-- [ ] Push reviewed code to `github.com/dgtlss/clearance`; verify the intended branch and file contents on GitHub.
-- [x] Prepare `LICENSE` (MIT), `composer.json` license metadata, the README, and the CHANGELOG locally.
-- [ ] Verify GitHub detects the MIT license after the files are pushed.
-- [ ] Set the repository description and topics: `laravel`, `security`, `authorization`, `owasp`, `pest`.
+- [x] Complete the scope in `docs/v1-plan.md`; document the separate later roadmap.
+- [x] Independently review security boundaries; reproduce and fix the five confirmed findings with regression coverage. Check the follow-up Livewire property and callable-method cases.
+- [x] Pass core tests, fresh-app acceptance, lint and strict Composer validation across all six PHP 8.3–8.5 / Laravel 12–13 combinations.
+- [x] Exercise real Spatie roles, both test runners, owned/foreign and nested bindings, mutation rollback, deterministic baselines, approvals and coverage-loss gates.
+- [x] Check published Livewire 3/4, Filament 4/5, Sanctum 4, Warden 2.2 and Advisor 1.1 integrations; fail focused integration tests on skips.
+- [x] Check MySQL 8.4 and PostgreSQL 17 isolation on Laravel 12 and 13 with two disposable databases.
+- [x] Install the built ZIP in a fresh app; inspect the artifact and Git export rules.
+- [x] Run the synthetic 507-route / 3,549-scenario benchmark within five minutes; document warm-dependency timing limits.
+- [x] Build the static docs and check local links. Keep API, migration, support and known limits consistent with code.
+- [x] Prepare MIT license metadata, README, CHANGELOG and SECURITY policy.
+- [x] Keep private consumer application identities, fixtures and results out of package files and distribution artifacts.
 
-## 2. Acceptance validation
+## Before approving a release
 
-- [x] Verify the committed Spatie fixture: seven route-method entries, four personas and 49 fully verified scenarios through both Pest and PHPUnit.
-- [x] Check owned/foreign access, nested scoped bindings, database rollback, side-effect fakes and deterministic baseline files.
-- [x] Confirm deliberate authorization removal blocks CI and that approvals leave unrelated changes blocking.
-- [x] Confirm registered-route exclusions require scope review while physical route deletion remains narrowing.
-- [x] Document reproducible fixture-based checks in `docs/acceptance.md`. Keep consumer application identities, results and artifacts outside the package.
+- [ ] Review the candidate diff, schema migration, public API and documented limits.
+- [ ] Make the reviewed candidate available on GitHub and run every hosted workflow against its exact commit. Local runs do not establish hosted CI status.
+- [ ] Collect and record human beta/RC feedback, including integration setup and false positives, without exposing private consumer data.
+- [ ] Resolve any resulting blockers and repeat affected checks.
+- [ ] Merge the reviewed candidate into `main` and verify its final commit and hosted checks.
+- [ ] Verify GitHub detects the MIT license and private vulnerability reporting remains enabled.
+- [ ] Set the repository description/topics and recheck package-name availability and search overlap.
+- [ ] On the actual approved release date, move Unreleased notes into a dated `1.0.0` section, add real comparison/tag links, and update the README status. Do not use the draft date as a release date.
 
-## 3. Docs
+## Tag and publish — explicit release approval required
 
-- [x] Merge the quickstart into `README.md`; verify all draft command names, options, config keys, classes, and paths against the implementation.
-- [x] Check the limits against current behavior, including redirect classification, route removal, transaction scope, and subprocess timeouts.
-- [x] Add a prominent beta/API-may-change note and keep the planned v0.1.0 notes under `Unreleased`.
-- [ ] On the actual release date, update the README's unreleased status, move the Unreleased notes into a dated `0.1.0` section, and add links to the real tag and comparison. Keep the beta/API-may-change note; do not use the documentation draft date as the release date.
-- [x] Add `SECURITY.md`; enable GitHub private vulnerability reporting and verify the repository API returns `enabled: true`.
-- [x] Recheck local Composer installation, auto-discovery, installer commands and both test runners in fresh Laravel 12 and 13 apps. Verify Warden auto-registration against its real optional contract locally.
+- [ ] Obtain approval to tag and publish; the current instruction explicitly holds both.
+- [ ] Create an annotated `v1.0.0` tag on the reviewed `main` commit and push it.
+- [ ] Submit `dgtlss/clearance` to Packagist and enable the GitHub auto-update hook.
+- [ ] Check `composer require dgtlss/clearance:^1.0 --dev` in fresh Laravel 12 and 13 apps.
+- [ ] Create GitHub release notes from the dated CHANGELOG, including installation, migration, evidence and limits.
 
-## 4. Tag and publish — separate release approval required
+## Announce — on or after 17 November 2026
 
-- [ ] Tag `v0.1.0` on reviewed `main` with an annotated tag and push it.
-- [ ] Verify `dgtlss/clearance` is available on Packagist, submit it, and enable the GitHub auto-update hook.
-- [ ] Check `composer require dgtlss/clearance:^0.1 --dev` in fresh Laravel 12 and 13 apps.
-- [ ] Create GitHub release notes from the CHANGELOG with highlights, installation, limits, roadmap, and a quickstart link. Mark the release as a pre-release.
-
-## 5. Announce — on or after 17 November 2026
-
-- [ ] Prepare a post about missing authorization checks and the access matrix, using the committed example fixtures.
-- [ ] Announce through the chosen channels: X, r/laravel, a Laravel News submission, and a Warden README cross-link.
-- [ ] Triage issues during the first week, prioritizing false positives.
-
-## Naming checks before publishing
-
-- [ ] Recheck package-name availability and search overlap on release day. Verify the draft's noted `rivalex/clearance` Laravel package and Thoughtbot's Rails `clearance` gem rather than treating their current status as confirmed.
+- [ ] Prepare a post explaining missing authorization checks and the access matrix using committed synthetic fixtures.
+- [ ] Announce through the chosen channels, and triage issues during the first week, prioritizing false positives.

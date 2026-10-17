@@ -30,4 +30,11 @@ class PayloadBuilderTest extends TestCase
         $this->assertSame($payload['password'], $payload['password_confirmation']);
         $this->assertArrayNotHasKey('optional', $payload);
     }
+
+    public function test_common_string_and_numeric_bounds_produce_usable_values(): void
+    {
+        $payload = (new PayloadBuilder)->fromRules(['code' => 'required|string|min:12|max:15', 'count' => 'required|integer|min:5']);
+        $this->assertSame(12, strlen($payload['code']));
+        $this->assertSame(5, $payload['count']);
+    }
 }

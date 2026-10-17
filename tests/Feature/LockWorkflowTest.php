@@ -313,4 +313,67 @@ class LockWorkflowTest extends TestCase
         file_put_contents(config('clearance.lock_path'), CanonicalJson::encode($matrix));
         $this->artisan('clearance:check')->assertExitCode(3);
     }
+
+    public function test_static_approvals_are_isolated_and_cannot_hide_coverage_or_persona_changes(): void
+    {
+        $before = $this->matrix();
+        app(LockFile::class)->write($before);
+        $after = $before;
+        foreach (['save', 'delete'] as $method) {
+            $id = 'livewire Fixture@'.$method;
+            $after['surfaces'][$id] = [
+                'kind' => 'livewire', 'class' => 'Fixture', 'method' => $method, 'evidence' => 'static',
+                'guards' => ['middleware' => [], 'checks' => [], 'policies' => [], 'scoping' => [], 'evidence' => ['body:'.$method]],
+                'access' => [], 'source' => null, 'verdict' => 'unknown', 'diagnostics' => [], 'approved' => null,
+            ];
+            $after['surface_inventory'][] = $id;
+        }
+        $after['collectors']['livewire']['status'] = 'complete';
+        $this->harness($after);
+        $id = 'livewire Fixture@save';
+        $this->artisan('clearance:check')->assertExitCode(1);
+        $this->artisan('clearance:approve', ['--coverage' => true, '--reason' => 'New static scope'])->assertExitCode(1);
+        $this->artisan('clearance:approve', ['route' => $id, '--persona' => 'customer', '--reason' => 'Invalid runtime claim'])->assertExitCode(2);
+        $this->artisan('clearance:approve', ['route' => $id, '--reason' => 'Review static implementation'])->assertSuccessful();
+        $lock = app(LockFile::class)->read();
+        $this->assertTrue(app(ApprovalStore::class)->valid($lock['surfaces'][$id]));
+        $this->assertArrayNotHasKey('livewire Fixture@delete', $lock['surfaces']);
+        $this->artisan('clearance:check')->assertExitCode(1);
+        $this->artisan('clearance:approve', ['route' => 'livewire Fixture@delete', '--reason' => 'Second review'])->assertSuccessful();
+        $this->artisan('clearance:check')->assertSuccessful();
+        $after['surfaces'][$id]['guards']['evidence'] = ['body:changed'];
+        $this->harness($after);
+        $this->artisan('clearance:check')->assertExitCode(1);
+        $this->artisan('clearance:lock')->assertExitCode(1);
+        $this->artisan('clearance:approve', ['route' => $id, '--reason' => 'Changed implementation reviewed'])->assertSuccessful();
+        $this->artisan('clearance:check')->assertSuccessful();
+        $after['scope']['detect']['livewire'] = false;
+        $after['surfaces'] = [];
+        $after['surface_inventory'] = [];
+        $after['collectors']['livewire']['status'] = 'disabled';
+        $this->harness($after);
+        $this->artisan('clearance:check')->assertExitCode(1);
+        $this->artisan('clearance:approve', ['--coverage' => true, '--reason' => 'Explicitly review excluded component checks'])->assertSuccessful();
+        $this->artisan('clearance:check')->assertSuccessful();
+    }
+
+    public function test_static_lock_rejects_fake_runtime_evidence_and_malformed_guard_profiles(): void
+    {
+        $matrix = $this->matrix();
+        $id = 'filament fixture:resource:Fixture';
+        $surface = ['kind' => 'filament', 'class' => 'Fixture', 'evidence' => 'static',
+            'guards' => ['middleware' => [], 'checks' => [], 'policies' => [], 'scoping' => [], 'evidence' => []],
+            'access' => [], 'verdict' => 'unknown', 'diagnostics' => []];
+        $matrix['surface_inventory'] = [$id];
+        $invalid = [
+            array_replace($surface, ['access' => ['guest' => 'deny']]),
+            array_replace_recursive($surface, ['guards' => ['policies' => [['class' => 'Missing method']]]]),
+            array_replace($surface, ['verdict' => 'verified']),
+        ];
+        foreach ($invalid as $profile) {
+            $matrix['surfaces'] = [$id => $profile];
+            file_put_contents(config('clearance.lock_path'), CanonicalJson::encode($matrix));
+            $this->artisan('clearance:check')->assertExitCode(3);
+        }
+    }
 }

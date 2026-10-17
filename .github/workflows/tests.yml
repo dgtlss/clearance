@@ -43,3 +43,99 @@ jobs:
           coverage: none
       - run: composer install --prefer-dist --no-interaction
       - run: composer lint
+
+  integrations:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {php: '8.3', laravel: '^12.0', testbench: '^10.0', filament: '^4.0', phpunit: '^11.5', pest: '^3.8', advisor: true}
+          - {php: '8.5', laravel: '^13.0', testbench: '^11.0', filament: '^5.0', phpunit: '^12.0', pest: '^4.0', advisor: false}
+    name: Optional integrations / Filament ${{ matrix.filament }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: mbstring, pdo_sqlite, intl, zip
+          coverage: none
+      - run: composer require --dev --no-update 'filament/filament:${{ matrix.filament }}' 'laravel/sanctum:^4.0' 'dgtlss/warden:^2.2'
+      - if: matrix.advisor
+        run: composer require --dev --no-update 'dgtlss/owaspadvisor:1.1.*'
+      - run: composer update --prefer-dist --no-interaction --with='laravel/framework:${{ matrix.laravel }}' --with='orchestra/testbench:${{ matrix.testbench }}' --with='phpunit/phpunit:${{ matrix.phpunit }}' --with='pestphp/pest:${{ matrix.pest }}'
+      - run: composer test
+      - run: vendor/bin/phpunit --filter 'test_livewire_real|test_livewire_overrides|test_filament_real|test_filament_trait|test_anonymous_livewire|test_ambiguous_external|ApiAuthenticationTest|WardenIntegrationTest' --fail-on-skipped
+      - if: matrix.advisor
+        run: vendor/bin/phpunit --filter AdvisorIntegrationTest --fail-on-skipped
+      - if: ${{ !matrix.advisor }}
+        run: vendor/bin/phpunit --filter test_filament_five --fail-on-skipped
+
+  databases:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        laravel: ['^12.0', '^13.0']
+        include:
+          - {laravel: '^12.0', testbench: '^10.0'}
+          - {laravel: '^13.0', testbench: '^11.0'}
+    name: SQL isolation / Laravel ${{ matrix.laravel }}
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: fixture-only
+          MYSQL_DATABASE: clearance_primary
+          MYSQL_ROOT_HOST: '%'
+        ports: ['3306:3306']
+        options: --health-cmd="mysqladmin ping -h localhost -pfixture-only" --health-interval=5s --health-timeout=5s --health-retries=20
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: clearance
+          POSTGRES_PASSWORD: fixture-only
+          POSTGRES_DB: clearance_primary
+        ports: ['5432:5432']
+        options: --health-cmd="pg_isready -U clearance -d clearance_primary" --health-interval=5s --health-timeout=5s --health-retries=20
+    env:
+      CLEARANCE_TEST_DATABASE: clearance_primary
+      CLEARANCE_TEST_SECONDARY_DATABASE: clearance_secondary
+      CLEARANCE_TEST_DB_HOST: 127.0.0.1
+      CLEARANCE_TEST_DB_PASSWORD: fixture-only
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          extensions: mbstring, pdo_sqlite, pdo_mysql, pdo_pgsql
+          coverage: none
+      - run: composer update --prefer-dist --no-interaction --with='laravel/framework:${{ matrix.laravel }}' --with='orchestra/testbench:${{ matrix.testbench }}'
+      - name: MySQL ownership and two-connection rollback
+        env:
+          CLEARANCE_TEST_DB_DRIVER: mysql
+          CLEARANCE_TEST_DB_USER: root
+        run: |
+          php -r '(new PDO("mysql:host=127.0.0.1;dbname=clearance_primary", "root", "fixture-only"))->exec("CREATE DATABASE clearance_secondary");'
+          vendor/bin/phpunit --filter DatabaseIsolationTest --fail-on-skipped
+      - name: PostgreSQL ownership and two-connection rollback
+        env:
+          CLEARANCE_TEST_DB_DRIVER: pgsql
+          CLEARANCE_TEST_DB_USER: clearance
+        run: |
+          php -r '(new PDO("pgsql:host=127.0.0.1;dbname=clearance_primary", "clearance", "fixture-only"))->exec("CREATE DATABASE clearance_secondary");'
+          vendor/bin/phpunit --filter DatabaseIsolationTest --fail-on-skipped
+
+  distribution:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          extensions: mbstring, pdo_sqlite, zip
+          coverage: none
+      - run: composer install --prefer-dist --no-interaction
+      - run: composer test:package
+      - run: composer test:benchmark
+      - run: composer docs

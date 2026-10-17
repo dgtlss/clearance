@@ -29,9 +29,46 @@ final class LockFile
 
     private function validate(mixed $matrix): array
     {
-        if (! is_array($matrix) || ($matrix['schema'] ?? null) !== 1 || ! is_array($matrix['routes'] ?? null)
+        if (! is_array($matrix) || ! in_array($matrix['schema'] ?? null, [1, 2], true) || ! is_array($matrix['routes'] ?? null)
             || ! is_array($matrix['personas'] ?? null) || ! is_array($matrix['expected_all'] ?? null)) {
             throw new LockException('Lock file has a missing, stale or unsupported schema.', 3);
+        }
+
+        if ($matrix['schema'] === 2) {
+            if (! is_array($matrix['surfaces'] ?? null) || ! is_array($matrix['surface_inventory'] ?? null)
+                || ! array_is_list($matrix['surface_inventory']) || array_filter($matrix['surface_inventory'], fn ($id) => ! is_string($id)) !== []
+                || ! is_array($matrix['collectors'] ?? null) || array_intersect_key($matrix['routes'], $matrix['surfaces']) !== []) {
+                throw new LockException('Lock file contains invalid static surface metadata.', 3);
+            }
+            foreach ($matrix['collectors'] as $kind => $collector) {
+                if (! in_array($kind, ['livewire', 'filament'], true) || ! is_array($collector)
+                    || ! in_array($collector['status'] ?? null, ['complete', 'unavailable', 'disabled', 'error'], true)
+                    || ! $this->stringList($collector['diagnostics'] ?? null)) {
+                    throw new LockException('Lock file contains an invalid collector status.', 3);
+                }
+            }
+            foreach ($matrix['surfaces'] as $id => $surface) {
+                if (! is_string($id) || ! is_array($surface) || ! in_array($surface['kind'] ?? null, ['livewire', 'filament'], true)
+                    || ! str_starts_with($id, $surface['kind'].' ') || ($surface['evidence'] ?? null) !== 'static'
+                    || ($surface['access'] ?? null) !== [] || ! is_array($surface['guards'] ?? null)
+                    || ! is_string($surface['class'] ?? null) || ! in_array($id, $matrix['surface_inventory'], true)) {
+                    throw new LockException('Static surfaces must identify their kind and cannot claim verified access.', 3);
+                }
+                foreach (['middleware', 'checks', 'scoping', 'evidence'] as $key) {
+                    if (! is_array($surface['guards'][$key] ?? null) || ! array_is_list($surface['guards'][$key])
+                        || array_filter($surface['guards'][$key], fn ($value) => ! is_string($value)) !== []) {
+                        throw new LockException('Static surface guard descriptions must be lists of strings.', 3);
+                    }
+                }
+                if (! is_array($surface['guards']['policies'] ?? null) || ! array_is_list($surface['guards']['policies'])) {
+                    throw new LockException('Static surface policies must be a list.', 3);
+                }
+                $this->validatePolicies($surface['guards']['policies']);
+                if (! in_array($surface['verdict'] ?? null, ['guarded', 'unguarded', 'unknown'], true)
+                    || ! $this->stringList($surface['diagnostics'] ?? null)) {
+                    throw new LockException('Lock file contains an invalid static verdict or diagnostic.', 3);
+                }
+            }
         }
 
         if (isset($matrix['scope']) || isset($matrix['inventory'])) {
@@ -44,6 +81,17 @@ final class LockFile
                 $values = $matrix['scope'][$kind] ?? null;
                 if (! is_array($values) || ! array_is_list($values) || array_filter($values, fn ($value) => ! is_string($value)) !== []) {
                     throw new LockException('Lock file contains an invalid verification scope.', 3);
+                }
+            }
+            if (isset($matrix['scope']['detect'])) {
+                $detect = $matrix['scope']['detect'];
+                if (! is_array($detect) || ! is_bool($detect['livewire'] ?? null) || ! is_bool($detect['filament'] ?? null)) {
+                    throw new LockException('Lock file contains an invalid collector scope.', 3);
+                }
+                foreach (['components', 'paths', 'include', 'exclude'] as $key) {
+                    if (! $this->stringList($detect[$key] ?? null)) {
+                        throw new LockException('Lock file contains an invalid collector scope.', 3);
+                    }
                 }
             }
             if (array_diff(array_keys($matrix['routes']), $matrix['inventory']) !== []) {
@@ -85,12 +133,7 @@ final class LockFile
                 }
             }
 
-            foreach ($route['guards']['policies'] as $policy) {
-                if (! is_array($policy) || ! is_string($policy['class'] ?? null) || ! is_string($policy['method'] ?? null)
-                    || ! is_bool($policy['instance_aware'] ?? null)) {
-                    throw new LockException('Lock file contains an invalid policy profile.', 3);
-                }
-            }
+            $this->validatePolicies($route['guards']['policies']);
 
             foreach ($route['access'] as $access) {
                 if (is_array($access)) {
@@ -113,6 +156,22 @@ final class LockFile
         return $matrix;
     }
 
+    private function stringList(mixed $values): bool
+    {
+        return is_array($values) && array_is_list($values)
+            && array_filter($values, fn ($value) => ! is_string($value)) === [];
+    }
+
+    private function validatePolicies(array $policies): void
+    {
+        foreach ($policies as $policy) {
+            if (! is_array($policy) || ! is_string($policy['class'] ?? null) || ! is_string($policy['method'] ?? null)
+                || ! is_bool($policy['instance_aware'] ?? null)) {
+                throw new LockException('Lock file contains an invalid policy profile.', 3);
+            }
+        }
+    }
+
     public function preserveApprovals(array $before, array $after): array
     {
         if (isset($before['coverage_approval'])) {
@@ -121,16 +180,17 @@ final class LockFile
             }
             $after['coverage_approval'] = $before['coverage_approval'];
         }
-        foreach ($before['routes'] as $id => $old) {
-            if (($old['approved'] ?? null) === null || ! isset($after['routes'][$id])) {
+        foreach (Entries::all($before) as $id => $old) {
+            $section = Entries::section($id);
+            if (($old['approved'] ?? null) === null || ! isset($after[$section][$id])) {
                 continue;
             }
 
-            if (! $this->approvals->valid($old) || $this->approvals->hash($old) !== $this->approvals->hash($after['routes'][$id])) {
+            if (! $this->approvals->valid($old) || $this->approvals->hash($old) !== $this->approvals->hash($after[$section][$id])) {
                 throw new LockException("Approval for [{$id}] would be invalidated. Use clearance:approve with a new reason.", 1);
             }
 
-            $after['routes'][$id]['approved'] = $old['approved'];
+            $after[$section][$id]['approved'] = $old['approved'];
         }
 
         return $after;

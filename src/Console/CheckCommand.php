@@ -5,6 +5,7 @@ namespace Dgtlss\Clearance\Console;
 use Dgtlss\Clearance\Clearance;
 use Dgtlss\Clearance\Diff\MatrixDiff;
 use Dgtlss\Clearance\Matrix\CanonicalJson;
+use Dgtlss\Clearance\Matrix\Entries;
 use Dgtlss\Clearance\Matrix\LockFile;
 use Dgtlss\Clearance\Report\ConsoleReporter;
 use Dgtlss\Clearance\Report\GithubAnnotations;
@@ -34,7 +35,7 @@ final class CheckCommand extends ClearanceCommand
                         'severity' => $change['type'] === 'narrowing' ? 'medium' : 'high',
                         'route' => $change['route'],
                         'message' => $change['message'],
-                        'source' => $matrix['routes'][$change['route']]['source'] ?? null,
+                        'source' => Entries::all($matrix)[$change['route']]['source'] ?? null,
                     ]));
                 }
             }

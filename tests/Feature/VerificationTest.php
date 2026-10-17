@@ -6,21 +6,54 @@ use Dgtlss\Clearance\Clearance;
 use Dgtlss\Clearance\Diff\MatrixDiff;
 use Dgtlss\Clearance\Dynamic\Verifier;
 use Dgtlss\Clearance\Matrix\CanonicalJson;
+use Dgtlss\Clearance\Tests\Fixtures\ActorFacade;
 use Dgtlss\Clearance\Tests\Fixtures\FixtureController;
 use Dgtlss\Clearance\Tests\Fixtures\MissingActionController;
 use Dgtlss\Clearance\Tests\Fixtures\Order;
 use Dgtlss\Clearance\Tests\Fixtures\RedirectingOwnership;
 use Dgtlss\Clearance\Tests\Fixtures\RelatedPersonas;
+use Dgtlss\Clearance\Tests\Fixtures\ScopedActorController;
 use Dgtlss\Clearance\Tests\Fixtures\User;
 use Dgtlss\Clearance\Tests\TestCase;
+use GuzzleHttp\Promise\Create;
+use GuzzleHttp\Psr7\Response;
 use Illuminate\Auth\Middleware\Authenticate;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 
 class VerificationTest extends TestCase
 {
+    public function test_file_payloads_use_the_real_request_file_bag_and_keep_foreign_access_denied(): void
+    {
+        app('router')->post('/upload/{order}', [FixtureController::class, 'upload'])->middleware(['web', 'auth'])->name('fixture.upload');
+        config(['clearance.routes.include' => ['fixture.upload']]);
+        $matrix = app(Verifier::class)->run($this);
+        $route = $matrix['routes']['POST upload/{order}'];
+        $this->assertSame('deny', $route['access']['guest']);
+        $this->assertSame(['owned' => 'allow', 'foreign' => 'deny'], $route['access']['customer']);
+        $this->assertSame(200, $route['observations']['customer']['owned']['status']);
+        $this->assertSame(403, $route['observations']['customer']['foreign']['status']);
+        $this->assertDatabaseCount('orders', 0);
+        $this->assertFalse(Storage::disk('local')->exists('uploads/fixture.txt'));
+        $this->assertFalse(Storage::disk('local')->exists('uploads/fixture.png'));
+    }
+
+    public function test_application_commits_cannot_silently_disable_request_rollback(): void
+    {
+        app('router')->post('/commit', function () {
+            DB::commit();
+
+            return ['ok' => true];
+        })->name('fixture.commit');
+        config(['clearance.routes.include' => ['fixture.commit']]);
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('ended a Clearance transaction');
+        app(Verifier::class)->run($this);
+    }
+
     public function test_unresolved_actions_do_not_turn_runtime_failures_into_denials(): void
     {
         app('router')->post('/missing-action', [MissingActionController::class, 'missing'])->name('fixture.missing-action');
@@ -53,6 +86,8 @@ class VerificationTest extends TestCase
     public function test_422_only_counts_as_allowed_when_authorization_precedes_validation(): void
     {
         config(['clearance.routes.include' => ['fixture.update', 'fixture.late', 'fixture.validated-late']]);
+        config(['clearance.dynamic.payloads.PUT orders/{order}' => []]);
+        config(['clearance.dynamic.payloads.POST validated-late/{order}' => []]);
         $routes = app(Verifier::class)->run($this)['routes'];
 
         $this->assertSame(422, $routes['PUT orders/{order}']['observations']['customer']['owned']['status']);
@@ -284,5 +319,93 @@ class VerificationTest extends TestCase
 
         $this->assertSame('error', app(Verifier::class)->run($this)['routes']['GET outbound']['access']['guest']);
         $this->assertSame($original, Http::getFacadeRoot());
+    }
+
+    public function test_scoped_principals_facades_and_cached_controllers_are_reset_between_scenarios(): void
+    {
+        app()->scoped('fixture.actor', fn () => auth()->user());
+        app('router')->get('/scoped-actor', function () {
+            abort_unless(ActorFacade::getFacadeRoot()?->role === 'admin', 403);
+
+            return ['ok' => true];
+        })->middleware('web')->name('fixture.scoped-actor');
+        app('router')->get('/scoped-controller', ScopedActorController::class)->middleware('web')->name('fixture.scoped-controller');
+        config(['clearance.routes.include' => ['fixture.scoped-*']]);
+        $matrix = app(Verifier::class)->run($this);
+        foreach ($matrix['routes'] as $route) {
+            $this->assertSame(['admin' => 'allow', 'customer' => 'deny', 'guest' => 'deny'], $route['access']);
+        }
+        $this->assertDatabaseCount('users', 0);
+        $this->assertNull(ActorFacade::getFacadeRoot());
+    }
+
+    public function test_method_override_cannot_attribute_a_sibling_routes_denial_to_the_selected_route(): void
+    {
+        $calls = ['post' => 0, 'delete' => 0];
+        app('router')->post('/method-target', function () use (&$calls) {
+            $calls['post']++;
+
+            return ['ok' => true];
+        })->middleware('web')->name('fixture.method-post');
+        app('router')->delete('/method-target', function () use (&$calls) {
+            $calls['delete']++;
+            abort(403);
+        })->middleware('web')->name('fixture.method-delete');
+        config(['clearance.routes.include' => ['fixture.method-post'], 'clearance.dynamic.payloads.POST method-target' => ['_method' => 'DELETE']]);
+        $profile = app(Verifier::class)->run($this)['routes']['POST method-target'];
+        $this->assertSame(['post' => 0, 'delete' => 3], $calls);
+        $this->assertSame(array_fill_keys(['admin', 'customer', 'guest'], 'unverified'), $profile['access']);
+        $this->assertSame('routing', $profile['observations']['guest']['foreign']['category']);
+        config(['clearance.dynamic.payloads.POST method-target' => []]);
+        $plain = app(Verifier::class)->run($this)['routes']['POST method-target'];
+        $this->assertSame(array_fill_keys(['admin', 'customer', 'guest'], 'allow'), $plain['access']);
+        $this->assertSame(['post' => 3, 'delete' => 3], $calls);
+    }
+
+    public function test_inherited_http_allowlists_are_cleared_inside_verification_and_restored_afterwards(): void
+    {
+        if (! method_exists(Http::getFacadeRoot(), 'allowStrayRequests')) {
+            $this->markTestSkipped('This Laravel version has no selective stray-request allowlist.');
+        }
+        $calls = 0;
+        $transport = function () use (&$calls) {
+            $calls++;
+
+            return Create::promiseFor(new Response(200, [], '{}'));
+        };
+        Http::fake(['https://clearance.example.invalid/faked' => Http::response(['fixture' => 'dummy'])]);
+        Http::allowStrayRequests(['https://clearance.example.invalid/*']);
+        $original = Http::getFacadeRoot();
+        $fakes = [];
+        app('router')->get('/allowlisted-http', function () use ($transport, &$fakes) {
+            $fakes[] = Http::get('https://clearance.example.invalid/faked')->json('fixture');
+            Http::withOptions([])->setHandler($transport)->get('https://clearance.example.invalid/write');
+
+            return ['ok' => true];
+        })->name('fixture.allowlisted-http');
+        config(['clearance.routes.include' => ['fixture.allowlisted-http']]);
+        $profile = app(Verifier::class)->run($this)['routes']['GET allowlisted-http'];
+        $this->assertSame(0, $calls);
+        $this->assertSame(array_fill(0, 6, 'dummy'), $fakes);
+        $this->assertSame(array_fill_keys(['admin', 'customer', 'guest'], 'error'), $profile['access']);
+        $this->assertSame($original, Http::getFacadeRoot());
+        Http::withOptions([])->setHandler($transport)->get('https://clearance.example.invalid/write');
+        $this->assertSame(1, $calls);
+    }
+
+    public function test_unmatched_route_constraints_cannot_be_reported_as_foreign_record_denials(): void
+    {
+        app('router')->get('/constrained/{order}', [FixtureController::class, 'show'])->whereNumber('order')
+            ->middleware(['web', 'auth'])->name('fixture.constrained');
+        config(['clearance.routes.include' => ['fixture.constrained'],
+            'clearance.dynamic.parameters.GET constrained/{order}' => ['order' => 'invalid'],
+            'clearance.dynamic.parameters.HEAD constrained/{order}' => ['order' => 'invalid']]);
+        $matrix = app(Verifier::class)->run($this);
+        foreach ($matrix['routes'] as $route) {
+            $this->assertSame(['owned' => 'unverified', 'foreign' => 'unverified'], $route['access']['customer']);
+            $this->assertSame('unverified', $route['access']['guest']);
+            $this->assertSame('routing', $route['observations']['customer']['foreign']['category']);
+            $this->assertSame(404, $route['observations']['customer']['foreign']['status']);
+        }
     }
 }

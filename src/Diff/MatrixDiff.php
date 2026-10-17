@@ -3,6 +3,7 @@
 namespace Dgtlss\Clearance\Diff;
 
 use Dgtlss\Clearance\Matrix\CanonicalJson;
+use Dgtlss\Clearance\Matrix\Entries;
 use Illuminate\Routing\Middleware\ThrottleRequests;
 use Illuminate\Routing\Middleware\ValidateSignature;
 
@@ -15,6 +16,12 @@ final class MatrixDiff
     {
         $changes = [];
         $exempt = array_intersect($before['expected_all'] ?? [], $after['expected_all'] ?? []);
+        $previousEntries = Entries::all($before);
+        $currentEntries = Entries::all($after);
+
+        if (($before['schema'] ?? 1) !== ($after['schema'] ?? 1)) {
+            $changes[] = $this->change('coverage_lost', '(schema)', null, 'Matrix schema changed. Run clearance:migrate with a review reason first.');
+        }
 
         if (CanonicalJson::sort($before['scope'] ?? []) !== CanonicalJson::sort($after['scope'] ?? [])) {
             $changes[] = $this->change('coverage_lost', '(scope)', null, 'Verification scope changed. Review with clearance:approve --coverage --reason="...".');
@@ -23,8 +30,14 @@ final class MatrixDiff
             $changes[] = $this->change('coverage_lost', '(scope)', null, 'Stored coverage approval does not match the committed scope.');
         }
 
-        foreach ($after['routes'] as $id => $route) {
-            $old = $before['routes'][$id] ?? null;
+        foreach ($currentEntries as $id => $route) {
+            $old = $previousEntries[$id] ?? null;
+            $static = ($route['evidence'] ?? null) === 'static';
+            $start = count($changes);
+
+            if ($static && $old === null) {
+                $changes[] = $this->change('surface_added', $id, null, 'New static surface requires review; runtime access has not been verified.');
+            }
 
             if ($old !== null) {
                 foreach (['middleware', 'checks', 'policies', 'scoping'] as $kind) {
@@ -49,6 +62,10 @@ final class MatrixDiff
                         }
                     }
                 }
+            }
+
+            if ($static && $old !== null && $start === count($changes) && $this->approvals->hash($old) !== $this->approvals->hash($route)) {
+                $changes[] = $this->change('static_changed', $id, null, 'Static authorization evidence changed; review the implementation and renew its approval.');
             }
 
             foreach ($route['access'] as $persona => $access) {
@@ -76,11 +93,14 @@ final class MatrixDiff
             }
         }
 
-        foreach (array_diff_key($before['routes'], $after['routes']) as $id => $route) {
-            $deleted = isset($after['inventory']) && ! in_array($id, $after['inventory'], true);
+        foreach (array_diff_key($previousEntries, $currentEntries) as $id => $route) {
+            $static = ($route['evidence'] ?? null) === 'static';
+            $inventory = $static ? 'surface_inventory' : 'inventory';
+            $complete = ! $static || ($after['collectors'][$route['kind']]['status'] ?? null) === 'complete';
+            $deleted = $complete && isset($after[$inventory]) && ! in_array($id, $after[$inventory], true);
             $changes[] = $this->change($deleted ? 'narrowing' : 'coverage_lost', $id, null, $deleted
-                ? 'Route removed from the application.'
-                : 'Registered route is no longer included in verification.');
+                ? 'Surface removed from the application.'
+                : 'Previously inventoried surface is no longer covered.');
         }
 
         foreach (array_diff($after['expected_all'] ?? [], $before['expected_all'] ?? []) as $persona) {
@@ -96,7 +116,7 @@ final class MatrixDiff
 
     public function blocking(array $changes): array
     {
-        return array_values(array_filter($changes, fn (array $change) => in_array($change['type'], config('clearance.gate.fail_on', ['widening', 'guard_removed', 'instance_blind', 'coverage_lost']), true)));
+        return array_values(array_filter($changes, fn (array $change) => in_array($change['type'], config('clearance.gate.fail_on', ['widening', 'guard_removed', 'instance_blind', 'coverage_lost', 'surface_added', 'static_changed']), true)));
     }
 
     private function isScoredMiddleware(string $middleware): bool

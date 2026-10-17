@@ -17,6 +17,13 @@ final class ConsoleReporter
         }
 
         $command->table(['Route', 'Static', ...$matrix['personas']], $rows);
+        if (($matrix['surfaces'] ?? []) !== []) {
+            $rows = [];
+            foreach ($matrix['surfaces'] as $id => $surface) {
+                $rows[] = [$id, 'static only', $surface['verdict'], implode(', ', $surface['guards']['checks'])];
+            }
+            $command->table(['Surface', 'Evidence', 'Static verdict', 'Checks'], $rows);
+        }
 
         $this->summary($command, $matrix);
 
@@ -31,6 +38,11 @@ final class ConsoleReporter
         $command->line($summary['scenarios'].' scenarios, '.$summary['responses'].' HTTP responses.');
         foreach ($summary['incomplete'] as $category => $group) {
             $command->line('['.$category.'] '.$group['count'].' incomplete: '.$group['hint']);
+        }
+        foreach ($matrix['collectors'] ?? [] as $kind => $collector) {
+            if ($collector['status'] === 'error') {
+                $command->line('['.$kind.'] '.implode(' ', $collector['diagnostics']));
+            }
         }
     }
 }

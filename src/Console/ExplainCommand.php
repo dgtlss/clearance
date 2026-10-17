@@ -4,6 +4,7 @@ namespace Dgtlss\Clearance\Console;
 
 use Dgtlss\Clearance\Clearance;
 use Dgtlss\Clearance\Matrix\CanonicalJson;
+use Dgtlss\Clearance\Matrix\Entries;
 
 final class ExplainCommand extends ClearanceCommand
 {
@@ -16,16 +17,17 @@ final class ExplainCommand extends ClearanceCommand
         $id = $this->argument('route');
         $matrix = app(Clearance::class)->scan($id);
 
-        if (! isset($matrix['routes'][$id])) {
+        $section = Entries::section($id);
+        if (! isset($matrix[$section][$id])) {
             throw new \InvalidArgumentException("Unknown route [{$id}]. Use clearance:scan to list route identifiers.");
         }
 
-        if (! $this->option('dry-static')) {
+        if ($section === 'routes' && ! $this->option('dry-static')) {
             $matrix = $this->verify($id);
         }
 
-        $this->line(CanonicalJson::encode($matrix['routes'][$id]));
+        $this->line(CanonicalJson::encode($matrix[$section][$id]));
 
-        return ! $this->option('dry-static') && $this->hasErrors(['routes' => [$matrix['routes'][$id]]]) ? 2 : 0;
+        return $section === 'routes' && ! $this->option('dry-static') && $this->hasErrors(['routes' => [$matrix['routes'][$id]]]) ? 2 : 0;
     }
 }

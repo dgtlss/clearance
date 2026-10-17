@@ -22,6 +22,7 @@ final class ScanCommand extends ClearanceCommand
         if ($this->option('only') === 'risky') {
             $risky = array_column(array_filter(app(Findings::class)->forMatrix($matrix), fn (array $finding) => $finding['severity'] !== 'info'), 'route');
             $matrix['routes'] = array_filter($matrix['routes'], fn (array $route, string $id) => $route['verdict'] !== 'guarded' || in_array($id, $risky, true), ARRAY_FILTER_USE_BOTH);
+            $matrix['surfaces'] = array_filter($matrix['surfaces'], fn (array $surface, string $id) => $surface['verdict'] !== 'guarded' || in_array($id, $risky, true), ARRAY_FILTER_USE_BOTH);
         }
 
         $this->report($matrix);

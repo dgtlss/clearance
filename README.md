@@ -1,8 +1,8 @@
 # Clearance
 
-> **Beta (v0.1.0, unreleased). API may change.** Check who can reach your Laravel
-> routes, verify access with real requests, commit the result, and fail CI when
-> access widens.
+> **V1 development candidate — unreleased.** Verify who can reach Laravel routes,
+> inventory Livewire actions and Filament resources, and commit a reviewable
+> access matrix. No v1 tag or public release has been made.
 
 Clearance builds an **access matrix** for your app: configured routes × personas
 (guest, customer, staff, admin…). It calls routes through your test bootstrap as
@@ -19,7 +19,7 @@ notices the `authorize()` call is missing. Clearance makes that access visible.
 
 ## Install
 
-Once the beta is available through your Composer repository:
+When a release is available through your Composer repository:
 
 ```bash
 composer require dgtlss/clearance --dev
@@ -113,6 +113,41 @@ ambiguous responses, server errors, and test setup. Each group includes a next
 step. JSON output includes `summary` and `findings`; `clearance:explain` shows the
 category, status, and reason for each scenario.
 
+## Livewire and Filament static surfaces
+
+When their optional packages are installed, `scan`, `verify`, `lock` and `check`
+also inventory Livewire 3/4 actions and Filament 4/5 resources/pages. Reports keep
+these in a separate static table with **no verified persona access**.
+
+Livewire discovery uses registered components, application namespaces and configured
+paths, including Livewire 4 anonymous class templates. It records callable public
+actions, inherited/trait methods, effective `#[Locked]` properties, visible
+authorization checks and common mutations. Unresolved or ambiguous composition
+reports a collector error. Anonymous-template trait adaptations and conflicting
+trait/base property attributes require a named component class for complete
+static resolution.
+Filament discovery uses registered panels, resources and pages. It records model
+policies, authorization overrides, skipped authorization and panel guards. Filament 5
+configured instances of the same class are grouped with their configuration keys
+and slugs recorded in the evidence. Resource pages retain their resource identity.
+
+Static implementation fingerprints ignore formatting but include method bodies,
+relevant policy bodies and framework versions. Changes require review; they do
+not imply proven runtime widening. Missing a previously used dependency loses
+coverage. Collector errors fail at the default error threshold.
+
+```bash
+php artisan clearance:explain 'livewire App\Livewire\OrderEditor@save' --dry-static
+php artisan clearance:approve 'livewire App\Livewire\OrderEditor@save' \
+  --by=reviewer --reason='Reviewed action and related host feature tests'
+```
+
+Use the exact identifier printed by the scan. Static surfaces cannot use
+`--persona`. Configure `detect.livewire_components`, `detect.livewire_paths`,
+`detect.surfaces_include` and `detect.surfaces_exclude` for explicit discovery and
+scope. Disabling or excluding existing coverage needs a separate coverage review.
+Read the [public API](docs/api.md) and [integration recipes](docs/recipes.md).
+
 ## Set and approve a baseline
 
 ```bash
@@ -185,7 +220,9 @@ By default, the check blocks:
 - **Policy regression:** a previously instance-aware policy stops referencing
   the model instance.
 - **Lost coverage:** a persona, owned/foreign dimension, or previously verified
-  scenario disappears; a registered route is excluded; or verification scope changes.
+  scenario disappears; a registered surface is excluded; or verification scope changes.
+- **Static surface changes:** a Livewire/Filament surface is added, its implementation
+  fingerprint changes, or previously collected static coverage becomes unavailable.
 
 Actual removal of a route from the application's full inventory is narrowing
 and does not block. Hiding a registered route behind a filter or exclusion loses
@@ -197,7 +234,7 @@ blocks as coverage loss regardless of the error threshold. The scored change typ
 
 The lock records the full registered inventory and normalized `include`,
 `exclude`, `dynamic.methods`, and `dynamic.read_only` settings. Review intentional
-scope changes explicitly:
+scope changes explicitly (including static collector configuration):
 
 ```bash
 php artisan clearance:approve --coverage --by=reviewer \
@@ -209,13 +246,14 @@ approve widening, removed guards, or lost scenarios on retained routes. Review
 those routes separately first. It cannot be combined with a route, `--persona`,
 or `--all-new`. The default error threshold still requires all selected scenarios
 to be verified. Exclusions are visible gaps, not evidence that the excluded
-surface is safe. A schema-1 lock from before scope metadata was added uses this
-same review command to migrate; existing route approvals are preserved.
+surface is safe. For schema-1 baselines, first run `clearance:migrate --reason="Upgrade to v1"`.
+It preserves existing route approvals. Follow the [migration guide](docs/migration.md)
+to review new static surfaces and the expanded scope.
 
 | Exit | Meaning |
 | --- | --- |
 | 0 | Check passed; narrowing may be reported |
-| 1 | Unapproved widening, guard removal, instance-awareness regression, or lost coverage |
+| 1 | Unapproved matrix changes, including widening, guard removal, lost coverage or static drift |
 | 2 | Verification failure, errors/unverified outcomes above the threshold, expectation mismatch, or invalid command configuration |
 | 3 | Missing, malformed, or unsupported lockfile |
 
@@ -278,7 +316,8 @@ lock and Markdown matrix. **Reviewing that diff is the approval.**
 | `clearance:verify --json` | Run persona scenarios and print the matrix |
 | `clearance:lock --json` | Write JSON and Markdown; refuse unapproved widening |
 | `clearance:check --json` | Compare verification with the committed baseline |
-| `clearance:approve` | Approve one verified route, the first baseline, or scope changes with `--coverage` |
+| `clearance:approve` | Approve one route/static surface, the first baseline, or scope changes with `--coverage` |
+| `clearance:migrate --reason="Upgrade format" --by=reviewer` | Upgrade schema 1 to schema 2 without re-verifying or changing route approvals |
 | `clearance:explain 'PUT orders/{order}' --json` | Show guards and request observations; `--dry-static` skips requests |
 | `clearance:personas --json` | List personas; `--validate` also runs route verification through the test harness |
 
@@ -341,7 +380,9 @@ public function update(UpdateOrderRequest $request, Order $order): array
 }
 ```
 
-The minimal payload generator handles common required fields. A 422 counts as
+The minimal payload generator handles common required fields, basic bounds,
+and file/image uploads. Explicit payloads can contain Laravel `UploadedFile`
+instances, including nested files. Complex validation needs an override. A 422 counts as
 allowed when no validation-before-authorization hazard is detected. If validation
 precedes a visible controller authorization call, it stays unverified; supply a
 valid payload to verify the later check. 401/403, recognized login redirects on
@@ -361,8 +402,13 @@ it as `Illuminate\Foundation\Testing\RefreshDatabase` if the host needs migratio
 
 Each scenario wraps the default database connection in a transaction and rolls
 it back. Add secondary connection names to `clearance.dynamic.connections`.
+Request-scoped services, facade caches and cached route controllers are reset
+between scenarios. Effective HTTP method or route mismatches remain unverified;
+an unmatched route cannot prove a foreign-record denial.
 Mail, notifications, queues, events, and configured storage disks are faked;
-unstubbed Laravel HTTP client requests are blocked.
+unstubbed Laravel HTTP client requests are blocked, including URLs permitted by
+an inherited host allowlist. Existing fake responses and the original client are
+restored after each scenario.
 
 Use isolated testing databases, disks, and credentials. Set
 `clearance.dynamic.read_only` to route globs to skip write requests; those cells
@@ -371,7 +417,7 @@ host app and resolving controller middleware can execute host initialization cod
 
 ## Optional: Warden adapter
 
-If [Warden](https://github.com/dgtlss/warden) with the
+If [Warden](https://github.com/dgtlss/warden) 2.2+ with the
 `Dgtlss\Warden\Contracts\CustomAudit` API is installed, Clearance automatically
 registers `Dgtlss\Clearance\Integrations\WardenAudit` in `warden.custom_audits`.
 There is no need to register it manually. Set `clearance.report.warden` to `false`
@@ -385,6 +431,22 @@ Unapproved widening and the other blocking matrix changes block the audit.
 Current baseline findings remain advisory. Findings carry **OWASP A01 (Broken
 Access Control)** metadata. Verification failures are reported as failed audits.
 Warden is optional; Clearance works without it.
+
+## Optional: OWASP Advisor
+
+With `dgtlss/owaspadvisor` 1.1 installed on Laravel 12, Clearance decorates both
+Advisor service bindings. Its native audit retains existing checks and adds
+`access_control.checks.clearance_verified_access`. Set
+`clearance.report.owasp_advisor=false` to opt out. Advisor 1.1 does not support
+Laravel 13; Clearance itself does not require Advisor.
+
+The A01 status is the worse of Advisor's existing status and Clearance's result.
+The bridge adds an outcome score: success **100**, warning **50**, error **0**.
+The nested `boundary_conformance_score` is **100** only for fully verified
+conformance to the reviewed scope; failed or unavailable verification earns **0**.
+Baseline advisories remain visible and can produce a warning. These are documented
+Clearance report scores, not an upstream numeric scoring API or an OWASP certification.
+The integration runs the same testing-only host harness as `clearance:check`.
 
 ## What it can't prove
 
@@ -401,9 +463,13 @@ Clearance provides evidence for the supplied scenarios, not a guarantee:
   action or a custom guard's rejection. Use host feature tests to establish that
   boundary. Hidden validation/authorization control flow may need explicit payloads
   and feature tests as well.
-- **Routes only.** Internal Livewire actions and Filament resources are not
-  inventoried. Their integrations remain roadmap work.
-- **No OWASP Advisor scoring.** The Warden adapter provides A01 metadata only.
+- **Component/resource evidence is static.** Livewire actions and Filament resources
+  are inventoried, but no persona requests are made to their internal actions. A
+  `guarded` verdict means visible evidence, not enforced authorization. Dynamic
+  component verification remains later work. Custom discovery, functional Volt
+  templates and authorization hidden in helpers can require explicit fixtures.
+- **Advisor scores describe report outcomes.** They do not certify an application
+  or prove every access-control path is secure.
 - **Side effects have limits.** Transactions cover only the default and configured
   connections. DDL, manual commits, direct filesystem writes, raw sockets, and
   external SDKs that bypass Laravel's HTTP client can escape rollback or fakes.
@@ -414,7 +480,8 @@ Clearance provides evidence for the supplied scenarios, not a guarantee:
 - **No deployed-site testing or runtime enforcement.** This is an in-process
   testing tool, not a pentest or a WAF.
 
-See [implementation status](docs/implementation.md) for the current coverage.
+See [implementation status](docs/implementation.md), the [public API](docs/api.md),
+[support policy](docs/support.md) and [v1 migration guide](docs/migration.md).
 
 ## Development
 
@@ -422,6 +489,9 @@ See [implementation status](docs/implementation.md) for the current coverage.
 composer install
 composer test
 composer test:acceptance
+composer test:package
+composer test:benchmark
+composer docs
 composer lint
 composer validate --strict
 ```
@@ -429,7 +499,8 @@ composer validate --strict
 The suite uses SQLite fixtures with owner/outsider policies and intentionally
 vulnerable routes. The repository defines six PHP/Laravel CI combinations across
 PHP 8.3–8.5 and Laravel 12–13; configured jobs are not a claim that a release's CI
-has passed. See the [release checklist](.github/RELEASE_CHECKLIST.md).
+has passed. See the [candidate validation](docs/v1-validation.md) and
+[release checklist](https://github.com/dgtlss/clearance/blob/main/.github/RELEASE_CHECKLIST.md).
 
 The acceptance command creates a temporary Laravel app, installs the local
 package through Composer, and uses real Spatie roles. It checks both Pest and
@@ -440,10 +511,10 @@ for Composer; failed fixtures are retained at the printed temporary path.
 Report vulnerabilities in Clearance through the private channel in
 [SECURITY.md](SECURITY.md).
 
-## Roadmap (not in v0.1)
+## Later roadmap
 
 - **v1.x/v2:** replay recording from existing tests, SARIF, sticky PR comments or a
-  GitHub Action, Livewire/Filament collectors, tenancy, Sanctum/Passport token
+  GitHub Action, dynamic Livewire/Filament checks, tenancy, Sanctum/Passport token
   dimensions, parallel runs, and field-level exposure.
 - **Pro (separate):** history, compliance PDFs, dashboards, organization policies,
   and scheduled drift runs.

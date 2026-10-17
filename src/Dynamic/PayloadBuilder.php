@@ -5,6 +5,7 @@ namespace Dgtlss\Clearance\Dynamic;
 use Dgtlss\Clearance\Attributes\Payload;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Routing\Route;
 use Illuminate\Support\Arr;
 use ReflectionMethod;
@@ -70,6 +71,8 @@ final class PayloadBuilder
             }
 
             $value = match (true) {
+                in_array('image', $types, true) => UploadedFile::fake()->createWithContent('clearance.png', base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jF9sAAAAASUVORK5CYII=')),
+                in_array('file', $types, true) => UploadedFile::fake()->create('clearance.txt', 1, 'text/plain'),
                 in_array('accepted', $types, true), in_array('boolean', $types, true) => true,
                 in_array('integer', $types, true), in_array('numeric', $types, true) => 1,
                 in_array('array', $types, true) => [],
@@ -81,6 +84,17 @@ final class PayloadBuilder
             };
 
             foreach ($parts as $part) {
+                if (str_starts_with($part, 'min:') && is_numeric(substr($part, 4))) {
+                    $min = max(0, min(1024, (int) substr($part, 4)));
+                    if (in_array('integer', $types, true) || in_array('numeric', $types, true)) {
+                        $value = max($value, $min);
+                    } elseif (is_string($value) && in_array('string', $types, true)) {
+                        $value = str_pad($value, $min, 'x');
+                    }
+                }
+                if (str_starts_with($part, 'max:') && is_numeric(substr($part, 4)) && is_string($value) && in_array('string', $types, true)) {
+                    $value = substr($value, 0, max(0, (int) substr($part, 4)));
+                }
                 if (str_starts_with($part, 'in:')) {
                     $value = str_getcsv(substr($part, 3), ',', '"', '\\')[0];
                 }

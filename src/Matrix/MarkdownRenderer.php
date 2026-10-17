@@ -49,6 +49,20 @@ final class MarkdownRenderer
             $lines[] = '';
         }
 
+        if (($matrix['surfaces'] ?? []) !== []) {
+            $lines = [...$lines, '## Static component and resource surfaces', '',
+                'These profiles are static evidence. No persona access or runtime component action is verified.', '',
+                '| Surface | Static verdict | Locked properties | Checks / policies | Approval |',
+                '| --- | --- | --- | --- | --- |'];
+            foreach ($matrix['surfaces'] as $id => $profile) {
+                $checks = [...$profile['guards']['checks'], ...array_map(fn ($policy) => $policy['class'].'@'.$policy['method'], $profile['guards']['policies'])];
+                $review = $profile['approved'] ?? null;
+                $approval = $review ? ($approvals->valid($profile) ? '' : 'Invalid: ').($review['by'] ?? '?').': '.($review['reason'] ?? '?') : '—';
+                $lines[] = '| '.$this->escape($id).' | '.$this->escape($profile['verdict']).' | '.$this->escape(implode(', ', $profile['locked_properties'] ?? [])).' | '.$this->escape(implode(', ', $checks)).' | '.$this->escape($approval).' |';
+            }
+            $lines[] = '';
+        }
+
         return implode("\n", $lines)."\n";
     }
 
