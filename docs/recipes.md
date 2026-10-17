@@ -16,7 +16,7 @@ Spatie middleware, ownership and admin access through both test runners.
 
 Use `Persona::make('api-client')->user(fn () => User::factory()->create())->guard('sanctum')`
 for an existing `auth:sanctum` route. Keep the host's `api` middleware group,
-including `SubstituteBindings`, enabled. The suite checks guest isolation and
+including `SubstituteBindings`, enabled. Per-scenario scopes, facades and route controllers are reset. The suite checks guest isolation and
 owned/foreign policies through Sanctum's actual guard. This does not mint bearer
 tokens or vary token abilities. Token abilities and Passport scopes are later
 persona dimensions; test those separately in the host suite.

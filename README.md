@@ -121,7 +121,11 @@ these in a separate static table with **no verified persona access**.
 
 Livewire discovery uses registered components, application namespaces and configured
 paths, including Livewire 4 anonymous class templates. It records callable public
-actions, `#[Locked]` properties, visible authorization checks and common mutations.
+actions, inherited/trait methods, effective `#[Locked]` properties, visible
+authorization checks and common mutations. Unresolved or ambiguous composition
+reports a collector error. Anonymous-template trait adaptations and conflicting
+trait/base property attributes require a named component class for complete
+static resolution.
 Filament discovery uses registered panels, resources and pages. It records model
 policies, authorization overrides, skipped authorization and panel guards. Filament 5
 configured instances of the same class are grouped with their configuration keys
@@ -398,8 +402,13 @@ it as `Illuminate\Foundation\Testing\RefreshDatabase` if the host needs migratio
 
 Each scenario wraps the default database connection in a transaction and rolls
 it back. Add secondary connection names to `clearance.dynamic.connections`.
+Request-scoped services, facade caches and cached route controllers are reset
+between scenarios. Effective HTTP method or route mismatches remain unverified;
+an unmatched route cannot prove a foreign-record denial.
 Mail, notifications, queues, events, and configured storage disks are faked;
-unstubbed Laravel HTTP client requests are blocked.
+unstubbed Laravel HTTP client requests are blocked, including URLs permitted by
+an inherited host allowlist. Existing fake responses and the original client are
+restored after each scenario.
 
 Use isolated testing databases, disks, and credentials. Set
 `clearance.dynamic.read_only` to route globs to skip write requests; those cells
@@ -490,7 +499,8 @@ composer validate --strict
 The suite uses SQLite fixtures with owner/outsider policies and intentionally
 vulnerable routes. The repository defines six PHP/Laravel CI combinations across
 PHP 8.3–8.5 and Laravel 12–13; configured jobs are not a claim that a release's CI
-has passed. See the [release checklist](https://github.com/dgtlss/clearance/blob/main/.github/RELEASE_CHECKLIST.md).
+has passed. See the [candidate validation](docs/v1-validation.md) and
+[release checklist](https://github.com/dgtlss/clearance/blob/main/.github/RELEASE_CHECKLIST.md).
 
 The acceptance command creates a temporary Laravel app, installs the local
 package through Composer, and uses real Spatie roles. It checks both Pest and

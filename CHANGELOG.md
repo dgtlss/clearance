@@ -46,6 +46,13 @@ or tag has been set. Date these notes only when the release is approved.
 
 ### Fixed
 
+- Trait-provided and aliased authorization methods retain their real AST bodies, so Filament implementation changes invalidate static approvals instead of hashing a missing body.
+- Anonymous Livewire components retain trait/inherited public actions and locked properties. Unresolvable composition or ambiguous portable identities reports an error rather than false narrowing.
+- Livewire property redeclarations remove inherited locked evidence, and callable overrides of framework methods remain inventoried. Conflicting anonymous trait/base property attributes report incomplete discovery across supported PHP versions.
+- Request-scoped principals, facade roots and cached route controllers no longer leak into later persona scenarios.
+- Effective HTTP method mismatches and unmatched-route 404s cannot become verified denials for an unexecuted route.
+- Selective HTTP stray-request allowlists inherited from the host are cleared on the verifier's clone; original clients and configured fakes are preserved.
+
 - Uploaded files enter Laravel's real file bag. Minimal FormRequest payloads include basic bounds and file/image fixtures.
 - Application code ending a managed scenario transaction stops verification with an error instead of silently continuing after a commit.
 - Shared Filament page classes retain distinct resource identities rather than overwriting each other.

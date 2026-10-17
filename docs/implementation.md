@@ -12,7 +12,7 @@ on `codex/v1-readiness`; no v1 release, tag or publication is implied.
 | Verification | Host Pest/PHPUnit bootstrap, enabled middleware, real HTTP requests, parameter/payload overrides and controller attributes |
 | Payloads | Common required types/bounds and file/image fixtures; nested UploadedFile objects enter the real file bag |
 | Safety | Testing-only, per-scenario rollback on default/configured connections, side-effect fakes, blocked stray Laravel HTTP, transaction-ending detection |
-| Livewire 3/4 | Static registered/application component actions, anonymous class templates, locked properties, visible checks and mutations |
+| Livewire 3/4 | Static registered/application component actions, anonymous class templates, inherited/trait actions, locked properties, visible checks and mutations |
 | Filament 4/5 | Static panels/resources/pages, policies, overrides, skipped checks, panel guards, configured instances and distinct resource pages |
 | Matrix | Schema 2 routes plus separate static surfaces; deterministic maps, no fabricated component access, portable source locations |
 | Gate | Widening, guard removal, instance-awareness loss, lost runtime/static coverage, new static surfaces and implementation drift |
@@ -29,12 +29,21 @@ foreign record belongs to another newly built user, not every possible outsider.
 Typed Eloquent route parameters are supported. Custom binders and nested ownership
 need explicit fixtures and overrides. Unknown ownership cannot prove denial.
 
+Request scopes, facade caches and route controllers are reset for each scenario.
+Effective-method mismatches and unmatched-route 404s stay unverified. Inherited
+HTTP allowlists cannot bypass the verifier's stray-request block.
+
 Static calls establish presence, not enforcement on every path. Livewire/Filament
 profiles have empty access maps and do not execute internal actions. Custom
 discovery, functional Volt templates, arbitrary helper control flow and nested
 authorization logic can need host tests. A locked identifier does not establish
 permission to use its record. Implementation/framework fingerprints require
-review even when the textual guard signals remain unchanged.
+review even when the textual guard signals remain unchanged. Trait imports and
+aliases resolve their real bodies. Property redeclarations remove inherited
+locked signals, and application overrides of framework methods remain inventoried.
+Anonymous-template local trait adaptations, conflicting trait/base property
+attributes, unresolvable bases and ambiguous portable identities produce collector
+errors; a named component class can resolve more complex trait composition.
 
 Redirects to recognized login destinations on the scenario's origin count as
 denials. Other redirects remain unverified, including successful post-save
@@ -69,14 +78,14 @@ databases per run. Package acceptance installs the built ZIP rather than relying
 on a source symlink.
 
 The synthetic benchmark on 17 October 2026 verified **507 route entries / 3,549
-scenarios in 8.278 seconds** on native PHP 8.5.10 / Laravel 13.37.0 / SQLite.
+scenarios in 10.258 seconds** on native PHP 8.5.10 / Laravel 13.37.0 / SQLite.
 Dependencies were already installed; the timing includes the host bootstrap and
 real Spatie/ownership requests. This is a repeatable fixture result, not evidence
 of a five-minute first result in every consumer application. Composer downloads,
 application-specific setup and fixture complexity vary.
 
 Final candidate validation and independent-review evidence are recorded in
-[v1-plan.md](v1-plan.md). Hosted GitHub Actions and human beta/RC feedback remain
+[v1-validation.md](v1-validation.md). Hosted GitHub Actions and human beta/RC feedback remain
 separate release evidence after the reviewed candidate is made available.
 
 ## Later roadmap
