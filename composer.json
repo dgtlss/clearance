@@ -1,0 +1,41 @@
+{
+    "name": "dgtlss/clearance",
+    "description": "A reviewable access-control lockfile for Laravel applications.",
+    "type": "library",
+    "license": "MIT",
+    "require": {
+        "php": "^8.3",
+        "laravel/framework": "^12.0 || ^13.0",
+        "nikic/php-parser": "^5.4",
+        "symfony/process": "^7.2 || ^8.0"
+    },
+    "require-dev": {
+        "laravel/pint": "^1.24",
+        "orchestra/testbench": "^10.0 || ^11.0",
+        "pestphp/pest": "^3.8 || ^4.0",
+        "phpunit/phpunit": "^11.5 || ^12.0"
+    },
+    "autoload": {
+        "psr-4": { "Dgtlss\\Clearance\\": "src/" }
+    },
+    "autoload-dev": {
+        "psr-4": { "Dgtlss\\Clearance\\Tests\\": "tests/" }
+    },
+    "extra": {
+        "laravel": {
+            "providers": ["Dgtlss\\Clearance\\ClearanceServiceProvider"]
+        }
+    },
+    "scripts": {
+        "test": "phpunit",
+        "test:acceptance": "php tests/Acceptance/run.php",
+        "format": "pint",
+        "lint": "pint --test"
+    },
+    "config": {
+        "allow-plugins": { "pestphp/pest-plugin": true },
+        "sort-packages": true
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}

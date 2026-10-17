@@ -1,0 +1,45 @@
+name: Tests
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {php: '8.3', laravel: '^12.0', testbench: '^10.0', phpunit: '^11.5', pest: '^3.8'}
+          - {php: '8.4', laravel: '^12.0', testbench: '^10.0', phpunit: '^11.5', pest: '^3.8'}
+          - {php: '8.5', laravel: '^12.0', testbench: '^10.0', phpunit: '^11.5', pest: '^3.8'}
+          - {php: '8.3', laravel: '^13.0', testbench: '^11.0', phpunit: '^11.5', pest: '^3.8'}
+          - {php: '8.4', laravel: '^13.0', testbench: '^11.0', phpunit: '^12.0', pest: '^4.0'}
+          - {php: '8.5', laravel: '^13.0', testbench: '^11.0', phpunit: '^12.0', pest: '^4.0'}
+    name: PHP ${{ matrix.php }} / Laravel ${{ matrix.laravel }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: mbstring, pdo_sqlite
+          coverage: none
+      - run: composer update --prefer-dist --no-interaction --with='laravel/framework:${{ matrix.laravel }}' --with='orchestra/testbench:${{ matrix.testbench }}' --with='phpunit/phpunit:${{ matrix.phpunit }}' --with='pestphp/pest:${{ matrix.pest }}'
+      - run: composer validate --strict
+      - run: composer test
+      - run: composer test:acceptance
+
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          coverage: none
+      - run: composer install --prefer-dist --no-interaction
+      - run: composer lint

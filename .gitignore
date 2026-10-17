@@ -1,0 +1,13 @@
+/vendor/
+/composer.lock
+/.phpunit.cache/
+/.phpunit.result.cache
+/.phpunit-warnings.log
+/.phpunit-defects.log
+/.phpunit-errors.log
+/.phpunit-notices.log
+/.phpunit-deprecations.log
+/.phpunit-test-results.log
+/.phpunit-coverage/
+/.idea/
+/.DS_Store

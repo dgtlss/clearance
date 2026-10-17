@@ -1,0 +1,24 @@
+<?php
+
+namespace App\Clearance;
+
+use App\Models\User;
+use Dgtlss\Clearance\Persona;
+use Dgtlss\Clearance\Personas as BasePersonas;
+use Dgtlss\Clearance\World;
+
+class Personas extends BasePersonas
+{
+    public function define(): array
+    {
+        return [
+            Persona::guest(),
+            Persona::make('customer')->user(fn () => User::factory()->create()),
+        ];
+    }
+
+    public function ownership(World $world): void
+    {
+        // $world->owns(Order::class, fn (User $user) => Order::factory()->for($user)->create());
+    }
+}
