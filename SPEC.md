@@ -121,7 +121,10 @@ Plus generated `CLEARANCE.md`: one table per route group, rows = routes, columns
 
 ### 3d. Diff, gate & approve
 
-`clearance:check` regenerates the matrix in memory and compares with the lock:
+`clearance:check` regenerates the matrix in memory and compares with the lock.
+PR CI must use `--baseline=<trusted base ref>` to read that lock from a fetched
+Git commit, rather than the PR's editable checkout. Protect baseline changes and
+verification inputs with required code-owner review; see the README CI guide.
 
 - **Widening** (blocks CI): new route reachable by any non-admin persona; any cell `deny → allow`; `owned-only → foreign allow`; a guard removed (middleware/check/policy disappeared) even if dynamic results are unchanged; policy became instance-blind.
 - **Narrowing** (warns): `allow → deny`. Could be a bug, never a security issue.
@@ -135,8 +138,11 @@ php artisan clearance:approve --all-new --reason="Initial baseline"   # first ru
 ```
 
 Approval writes `approved: { by, reason, at, hash }` into the lock entry, where `hash` covers the route's guard profile + access row. If the access changes again, the approval is invalidated. Approvals show up in the PR diff, so the *review* is the approval. `clearance:lock` regenerates the whole file (refuses to drop approvals silently).
+New approvals require code-owner review and cannot override a Git baseline in the
+same PR. Maintainers must promote the reviewed baseline to the trusted ref
+through a separate controlled update before the access change can pass.
 
-Exit codes: `0` clean, `1` unapproved widening, `2` verification errors above threshold, `3` lock missing/stale schema.
+Exit codes: `0` clean, `1` unapproved widening, `2` verification errors above threshold, `3` unusable lock or Git baseline.
 
 ## 4. Artisan commands
 
@@ -146,7 +152,7 @@ Exit codes: `0` clean, `1` unapproved widening, `2` verification errors above th
 | `clearance:scan` | static only; fast; table output (`--json`, `--route=`, `--only=risky`) |
 | `clearance:verify` | static + dynamic; prints matrix |
 | `clearance:lock` | write `clearance.lock.json` + `CLEARANCE.md` |
-| `clearance:check` | CI gate: diff vs lock, exit code, annotations |
+| `clearance:check --baseline=origin/main` | CI gate: diff vs a trusted Git lock, exit code, annotations |
 | `clearance:approve` | approve specific widening(s) with reason |
 | `clearance:explain {route}` | full trace for one route: middleware, checks found, per-persona HTTP status and why |
 | `clearance:personas` | list personas and validate their factories build |
@@ -384,7 +390,10 @@ Gate every pull request:
 
 ```yaml
 # .github/workflows/clearance.yml
-- run: php artisan clearance:check
+- uses: actions/checkout@v4
+  with:
+    fetch-depth: 0
+- run: php artisan clearance:check --baseline=origin/main
 ```
 
 When access legitimately widens:
@@ -393,4 +402,5 @@ When access legitimately widens:
 php artisan clearance:approve "PUT orders/{order}" --persona=staff --reason="Staff edit any order (OPS-112)"
 ```
 
-The approval appears in the PR diff, so reviewing it is the approval.
+The approval appears in the PR diff and needs code-owner review. Follow the
+README workflow to promote it to the trusted baseline before merging widening.

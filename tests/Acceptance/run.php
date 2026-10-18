@@ -124,6 +124,22 @@ $markdown = $files->get($directory.'/CLEARANCE.md');
 $artisan(['clearance:lock']);
 $check($lock === $files->get($directory.'/clearance.lock.json') && $markdown === $files->get($directory.'/CLEARANCE.md'), 'Baseline files changed on an identical rerun.');
 $artisan(['clearance:check']);
+$run(['git', 'init', '--initial-branch=main']);
+$run(['git', 'config', 'user.name', 'Clearance fixture']);
+$run(['git', 'config', 'user.email', 'fixture@example.invalid']);
+$run(['git', 'config', 'commit.gpgSign', 'false']);
+$files->ensureDirectoryExists($directory.'/.git/clearance-hooks');
+$run(['git', 'config', 'core.hooksPath', $directory.'/.git/clearance-hooks']);
+$run(['git', 'add', '--', 'clearance.lock.json', 'CLEARANCE.md']);
+$run(['git', 'commit', '-m', 'Reviewed access baseline']);
+$run(['git', 'update-ref', 'refs/remotes/origin/main', 'HEAD']);
+$run(['git', 'checkout', '-b', 'feature-self-approval']);
+$trusted = $json($artisan(['clearance:check', '--baseline=origin/main', '--json']));
+$check($trusted['baseline_ref'] === 'origin/main' && $trusted['lock_changed'] === false && $trusted['changes'] === [], 'Unchanged trusted baseline did not pass.');
+$missing = $json($artisan(['clearance:check', '--baseline=missing-ref', '--json'], 3));
+$check(str_contains($missing['error'], 'Baseline ref'), 'Missing Git baseline did not fail clearly.');
+$missing = $json($artisan(['clearance:check', '--baseline', '--json'], 3));
+$check(str_contains($missing['error'], 'Baseline ref'), 'A baseline option without a ref fell back to the checkout lock.');
 $deleted = $json($artisan(['clearance:check', '--json'], 0, ['CLEARANCE_OMIT_STAFF' => '1']));
 $check(array_unique(array_column($deleted['changes'], 'type')) === ['narrowing'], 'Physical route deletion was not recognized as narrowing.');
 
@@ -141,6 +157,11 @@ $artisan(['clearance:approve', 'GET orders/{order}', '--reason=Acceptance test d
 $artisan(['clearance:check'], 1);
 $artisan(['clearance:approve', 'HEAD orders/{order}', '--reason=Acceptance test deliberate widening', '--by=fixture-reviewer']);
 $artisan(['clearance:check']);
+$run(['git', 'add', '--', 'clearance.lock.json', 'CLEARANCE.md']);
+$run(['git', 'commit', '-m', 'PR author approves their own widened access']);
+$selfApproved = $json($artisan(['clearance:check', '--baseline=origin/main', '--json'], 1));
+$check($selfApproved['lock_changed'] === true && in_array('widening', array_column($selfApproved['changes'], 'type'), true)
+    && in_array('guard_removed', array_column($selfApproved['changes'], 'type'), true), 'PR approval replaced the trusted access baseline.');
 
 $excluded = ['CLEARANCE_EXCLUDE' => 'acceptance.staff'];
 $scopeDiff = $json($artisan(['clearance:check', '--json'], 1, $excluded));
@@ -158,4 +179,4 @@ foreach (['users', 'orders', 'order_lines', 'roles', 'permissions'] as $table) {
 $check(! is_file($directory.'/storage/app/private/outbound.txt'), 'Route wrote to the real storage disk.');
 $db = null;
 $files->deleteDirectory($directory);
-fwrite(STDOUT, "Passed: installation, Spatie roles, 49 verified scenarios, nested ownership, rollback, both runners, stable lock, regression, approvals and coverage protection.\n");
+fwrite(STDOUT, "Passed: installation, Spatie roles, 49 verified scenarios, nested ownership, rollback, both runners, stable lock, trusted Git baseline, regression, approvals and coverage protection.\n");

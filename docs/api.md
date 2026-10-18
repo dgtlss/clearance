@@ -75,6 +75,16 @@ Signals establish presence, not control flow or enforcement.
 ## Commands and matrix schema
 
 All nine supported commands and options are listed in the [README](../README.md).
+`clearance:check --baseline=<git ref>` reads the configured lock from the resolved
+Git commit and compares current verification against it. The ref must already be
+fetched, and the lock path must be inside the application's repository; monorepos
+and custom lock paths are supported. Missing refs or invalid/missing baseline
+locks fail with exit code `3`, without falling back to the checkout lock. With
+this option, JSON also includes `baseline_ref` and `lock_changed`; checkout lock
+changes are advisory and cannot approve changes against the trusted ref. Without
+the option, `check` reads the checkout lock. Protect the baseline, workflow and
+verification inputs as described in the [CI guide](../README.md#gate-pull-requests-in-ci).
+
 Exact identifiers are `METHOD uri`, `METHOD [domain] uri`,
 `livewire Class@method`, `filament panel:resource:Class`,
 `filament panel:page:Class`, or

@@ -27,8 +27,10 @@ writes a storage file. The test requires every scenario to receive an HTTP
 response, checks each access result, compares Pest and PHPUnit output, and
 asserts rollback and real-disk isolation. It then verifies deterministic lock and
 Markdown files, read-only checks, physical route deletion, deliberate removal of
-authorization, separate GET/HEAD approvals, and explicit scope review. The
-fixture mutations happen in the temporary copy.
+authorization, separate GET/HEAD approvals, and explicit scope review. A local
+Git repository supplies a trusted base ref: unchanged access passes, missing refs
+fail clearly, and a feature branch's self-approved widened lock still fails
+against the base. The fixture mutations happen in the temporary copy.
 
 `.github/workflows/tests.yml` runs this command in all six supported PHP/Laravel
 combinations. These combinations also passed locally in isolated Docker runtimes

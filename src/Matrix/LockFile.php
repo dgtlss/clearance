@@ -5,6 +5,8 @@ namespace Dgtlss\Clearance\Matrix;
 use Dgtlss\Clearance\Diff\ApprovalStore;
 use Illuminate\Filesystem\Filesystem;
 use JsonException;
+use Symfony\Component\Process\Process;
+use Throwable;
 
 final class LockFile
 {
@@ -18,8 +20,79 @@ final class LockFile
             throw new LockException('Lock file is missing. Run clearance:lock to create a reviewed baseline.', 3);
         }
 
+        return $this->decode($this->files->get($path));
+    }
+
+    public function readFromGit(string $ref): array
+    {
+        if ($ref === '' || preg_match('/[\x00-\x20\x7f]/', $ref)) {
+            throw new LockException('Baseline ref must be a non-empty Git ref or commit without whitespace or control characters.', 3);
+        }
+        $root = rtrim($this->git(['rev-parse', '--show-toplevel'], 'Git baseline requires a Git checkout and an installed Git executable.'), "\r\n");
+        $commit = trim($this->git(['rev-parse', '--verify', '--end-of-options', $ref.'^{commit}'], "Baseline ref [{$ref}] does not resolve to a commit. Fetch the trusted base ref before checking."));
+        $path = config('clearance.lock_path');
+        if (! is_string($path) || $path === '' || str_contains($path, "\0")) {
+            throw new LockException('Git baseline requires a valid clearance.lock_path.', 3);
+        }
+        if (! str_starts_with($path, '/') && ! preg_match('/^[a-z]:[\\\\\/]/i', $path)) {
+            $path = base_path($path);
+        }
+        $prefix = rtrim($this->git(['rev-parse', '--show-prefix'], 'Git baseline could not resolve the application path in its repository.'), "/\r\n");
+        $logicalRoot = base_path($prefix === '' ? '' : str_repeat('../', count(explode('/', $prefix))));
+        $path = $this->normalizePath($path);
+        $relative = null;
+        foreach ([$root, $logicalRoot] as $directory) {
+            $directory = rtrim($this->normalizePath($directory), '/').'/';
+            if (str_starts_with($path, $directory)) {
+                $relative = substr($path, strlen($directory));
+                break;
+            }
+        }
+        if ($relative === null || $relative === '') {
+            throw new LockException('Git baseline lock path must be inside the application Git repository.', 3);
+        }
+        $path = $relative;
+        $json = $this->git(['show', '--no-ext-diff', '--no-textconv', $commit.':'.$path], "Baseline lock file [{$path}] is missing or unreadable at [{$ref}]. Commit the reviewed lock to the trusted base ref.");
         try {
-            $matrix = json_decode($this->files->get($path), true, 512, JSON_THROW_ON_ERROR);
+            return $this->decode($json);
+        } catch (LockException $e) {
+            throw new LockException("Baseline lock file [{$path}] at [{$ref}] is invalid: ".$e->getMessage(), 3, $e);
+        }
+    }
+
+    private function git(array $arguments, string $error): string
+    {
+        try {
+            $process = new Process(['git', '--no-pager', ...$arguments], base_path());
+            $process->setTimeout(10);
+            $process->mustRun();
+
+            return $process->getOutput();
+        } catch (Throwable $e) {
+            throw new LockException($error, 3, $e);
+        }
+    }
+
+    private function normalizePath(string $path): string
+    {
+        // Resolve lexically: a PR's symlinks must not select a different baseline blob.
+        $path = str_replace(DIRECTORY_SEPARATOR, '/', $path);
+        $parts = [];
+        foreach (explode('/', $path) as $part) {
+            if ($part === '..') {
+                array_pop($parts);
+            } elseif ($part !== '' && $part !== '.') {
+                $parts[] = $part;
+            }
+        }
+
+        return (str_starts_with($path, '/') ? '/' : '').implode('/', $parts);
+    }
+
+    private function decode(string $json): array
+    {
+        try {
+            $matrix = json_decode($json, true, 512, JSON_THROW_ON_ERROR);
         } catch (JsonException $e) {
             throw new LockException('Lock file contains invalid JSON.', 3, $e);
         }

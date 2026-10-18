@@ -26,7 +26,7 @@ final class InstallCommand extends ClearanceCommand
         }
 
         $this->info('Clearance installed. Edit app/Clearance/Personas.php, then run clearance:verify.');
-        $this->line("Add this step after your CI test database is prepared:\n  - run: php artisan clearance:check");
+        $this->line("Fetch your trusted base branch (checkout fetch-depth: 0), then check after preparing the CI test database:\n  - run: php artisan clearance:check --baseline=origin/main");
 
         return 0;
     }
