@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 1.0.1
+
+### Security
+
+- Add `clearance:check --baseline=<git ref>` to compare verification against the lock from a trusted commit. A PR that widens access cannot pass by approving or replacing its own lock when this option is used. Missing refs and missing or invalid baseline locks fail clearly; checkout symlinks cannot redirect the selected baseline blob.
+- Report checkout lock changes separately, including new approval metadata, through console warnings, GitHub annotations and JSON `baseline_ref` / `lock_changed` fields.
+- Update the CI recipe and installer guidance to use a fetched trusted base ref, with CODEOWNERS and required branch reviews protecting baseline changes and verification inputs. Without `--baseline`, checks retain checkout-lock behavior; upgrading alone does not close the self-approval bypass.
+- Add real-route regressions and fresh-host acceptance coverage for self-approved widening, unchanged locks, missing refs/locks, malformed locks, custom monorepo paths and checkout symlinks.
+
 ## [1.0.0] - 2026-10-17
 
 ### Added

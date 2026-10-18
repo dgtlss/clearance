@@ -206,8 +206,27 @@ git commit -m 'Clearance baseline'
 ## Gate pull requests in CI
 
 ```bash
-php artisan clearance:check
+php artisan clearance:check --baseline=origin/main
 ```
+
+For pull requests, compare against a **trusted base ref**, fetched from the base
+repository. `--baseline` resolves that ref to a commit and reads the configured
+`clearance.lock_path` directly from Git, rather than trusting the PR's copy. A
+PR that widens access still fails if its author updates or approves its own lock.
+Git must be installed, the lock must be inside the application's Git repository,
+and the ref and lock must already exist locally; Clearance does not fetch them.
+Missing refs, missing locks and invalid baseline locks fail with exit code `3`.
+
+Without `--baseline`, `clearance:check` compares against the checkout's lock.
+That remains useful locally, but **a PR can replace that lock and approve its own
+changes**. Upgrading the package alone does not protect a CI job that omits this
+option. Use a base branch controlled by maintainers, never the PR branch or a ref
+chosen by the PR author.
+
+When the checkout lock differs from the Git baseline, console output warns
+reviewers, and JSON includes `baseline_ref` and `lock_changed`. A changed lock
+alone is advisory; verified widening and other blocking changes still fail
+against the trusted baseline. Comparison never rewrites either lock.
 
 By default, the check blocks:
 
@@ -252,7 +271,7 @@ to review new static surfaces and the expanded scope.
 | 0 | Check passed; narrowing may be reported |
 | 1 | Unapproved matrix changes, including widening, guard removal, lost coverage or static drift |
 | 2 | Verification failure, errors/unverified outcomes above the threshold, expectation mismatch, or invalid command configuration |
-| 3 | Missing, malformed, or unsupported lockfile |
+| 3 | Missing, malformed, or unsupported lockfile, unavailable baseline ref, or unusable Git baseline |
 
 Add the check to your existing test job after preparing its testing database and
 services. This standalone example uses a disposable SQLite file so migrations
@@ -280,6 +299,8 @@ jobs:
       QUEUE_CONNECTION: sync
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Include the trusted base branch and its lock
       - uses: shivammathur/setup-php@v2
         with:
           php-version: '8.4'
@@ -293,16 +314,53 @@ jobs:
           php artisan key:generate
           php artisan migrate --force
       - name: Check access matrix
-        run: php artisan clearance:check
+        env:
+          CLEARANCE_BASE_REF: ${{ github.base_ref }}
+        run: php artisan clearance:check --baseline="refs/remotes/origin/$CLEARANCE_BASE_REF"
 ```
+
+`github.base_ref` selects the PR's destination branch. With a shallow checkout,
+explicitly fetch that branch from the base repository before checking instead.
+Keep this workflow under maintainer review, and run untrusted PR code without
+deployment credentials or write permissions.
 
 `clearance:check` emits escaped GitHub annotations automatically when
 `GITHUB_ACTIONS` is set, controlled by `clearance.report.github_annotations`.
 There is no annotation CLI switch. `--json` emits JSON instead of console output
 and annotations.
 
+Protect the baseline and the configuration of the check with `.github/CODEOWNERS`.
+Replace this example team with your own reviewers and adapt any custom paths:
+
+```text
+/clearance.lock.json                 @your-org/security
+/CLEARANCE.md                        @your-org/security
+/.github/CODEOWNERS                  @your-org/security
+/.github/workflows/clearance.yml      @your-org/security
+/config/clearance.php                @your-org/security
+/app/Clearance/                      @your-org/security
+/composer.json                      @your-org/security
+/composer.lock                      @your-org/security
+```
+
+Enable branch protection or rulesets on the trusted branch: require pull
+requests, **code-owner approval**, and the Clearance status check. Dismiss stale
+approvals after new commits, or require approval of the most recent push, and
+restrict direct pushes and bypasses. CODEOWNERS alone does not enforce review.
+Protect other files that control your test bootstrap and verification inputs as
+appropriate; arbitrary PR code can alter the check itself. A Git baseline does
+not sandbox contributor PHP or replace review of workflow and dependency changes.
+
 For legitimate widening, run `clearance:approve` locally and commit the updated
-lock and Markdown matrix. **Reviewing that diff is the approval.**
+lock and Markdown matrix. **New approvals in the same PR need code-owner
+review**; `--by` is recorded text, not authenticated review. That review does not
+make `--baseline` accept the PR's lock. Maintainers must deliberately promote the
+reviewed baseline to the trusted ref, for example in a separate code-owner-reviewed
+baseline-only PR, before the access-changing PR can pass. Do not remove
+`--baseline` or point it at the PR to make a failing check green.
+
+The Warden and Advisor integrations still read the checkout's lock. Run this
+Git-baseline command alongside them when using those integrations in PR CI.
 
 ## Commands
 
@@ -312,7 +370,7 @@ lock and Markdown matrix. **Reviewing that diff is the approval.**
 | `clearance:scan --json --route='orders.*' --only=risky` | Inspect static profiles without route requests |
 | `clearance:verify --json` | Run persona scenarios and print the matrix |
 | `clearance:lock --json` | Write JSON and Markdown; refuse unapproved widening |
-| `clearance:check --json` | Compare verification with the committed baseline |
+| `clearance:check --baseline=origin/main --json` | Compare verification with the lock from a trusted Git ref; omit `--baseline` for a local checkout comparison |
 | `clearance:approve` | Approve one route/static surface, the first baseline, or scope changes with `--coverage` |
 | `clearance:migrate --reason="Upgrade format" --by=reviewer` | Upgrade schema 1 to schema 2 without re-verifying or changing route approvals |
 | `clearance:explain 'PUT orders/{order}' --json` | Show guards and request observations; `--dry-static` skips requests |

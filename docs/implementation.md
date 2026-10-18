@@ -14,7 +14,7 @@ draft product guide; [api.md](api.md) documents the public API.
 | Livewire 3/4 | Static registered/application component actions, anonymous class templates, inherited/trait actions, locked properties, visible checks and mutations |
 | Filament 4/5 | Static panels/resources/pages, policies, overrides, skipped checks, panel guards, configured instances and distinct resource pages |
 | Matrix | Schema 2 routes plus separate static surfaces; deterministic maps, no fabricated component access, portable source locations |
-| Gate | Widening, guard removal, instance-awareness loss, lost runtime/static coverage, new static surfaces and implementation drift |
+| Gate | Widening, guard removal, instance-awareness loss, lost runtime/static coverage, new static surfaces and implementation drift; `check --baseline=<git ref>` uses a trusted Git lock |
 | Approvals | Canonical guard/access hashes, implementation evidence for static surfaces, explicit scope review, lossless schema-1 migration |
 | Commands/reports | Nine commands, console, Markdown, JSON, escaped GitHub annotations and actionable incomplete-check summaries |
 | Warden | Optional real 2.2 CustomAudit contract, blocking changes and advisory baseline findings with A01 metadata |
@@ -22,6 +22,13 @@ draft product guide; [api.md](api.md) documents the public API.
 | Distribution/docs | MIT, safe installer, artifact-install acceptance, public API/migration/support/recipes, local static docs build |
 
 ## Evidence and limits
+
+PR CI must use `clearance:check --baseline=<trusted base ref>` and protect the
+baseline and verification inputs with required code-owner review. Without this
+option, the check and optional audit integrations read the checkout's lock, which
+the PR can replace. The option reads Git objects, never accepts new PR approvals
+as its baseline, and reports checkout lock changes separately. It does not
+sandbox arbitrary contributor PHP or authenticate recorded reviewer names.
 
 Route access records only the supplied persona/input/model-state scenarios. A
 foreign record belongs to another newly built user, not every possible outsider.
